@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node fix-quotes.js)",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const l=fs.readFileSync\\('src/app/page.tsx','utf8'\\).split\\('\\\\n'\\)[0];console.log\\(JSON.stringify\\(l\\)\\);\")",
+      "Read(//c/Users/veron/.claude/projects/**)",
+      "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' \"/c/Users/veron/.claude/projects/c--Users-veron-OneDrive-Desktop-buddy-path-buddy-path/3b137155-719f-4b63-bc2f-9257eb21e619.jsonl\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=fs.readFileSync\\('/c/Users/veron/.claude/projects/c--Users-veron-OneDrive-Desktop-buddy-path-buddy-path/3b137155-719f-4b63-bc2f-9257eb21e619.jsonl','utf8'\\);const lines=d.split\\('\\\\n'\\).filter\\(Boolean\\);const counts={};lines.forEach\\(l=>{try{const o=JSON.parse\\(l\\);if\\(o.message&&o.message.role==='assistant'\\){\\(o.message.content||[]\\).forEach\\(c=>{if\\(c.type==='tool_use'&&c.name==='Bash'&&c.input&&c.input.command\\){let cmd=c.input.command.trim\\(\\);cmd=cmd.replace\\(/^cd[^&]+&&\\\\s*/,''\\);const tokens=cmd.trim\\(\\).split\\(/\\\\s+/\\);const key=tokens.slice\\(0,2\\).join\\(' '\\);counts[key]=\\(counts[key]||0\\)+1;}}\\);}}catch\\(e\\){}}\\);Object.entries\\(counts\\).sort\\(\\(a,b\\)=>b[1]-a[1]\\).slice\\(0,40\\).forEach\\(\\([k,v]\\)=>console.log\\(v,JSON.stringify\\(k\\)\\)\\);\")",
+      "Bash(npm install *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\veron\\OneDrive\\Desktop\\buddy-path\\buddy-path\\src\\app\\coach\\profile"
+    ]
+  }
+}
