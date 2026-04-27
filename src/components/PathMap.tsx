@@ -751,17 +751,21 @@ export default function PathMap() {
   const isUnlocked = (i: number) => i === 0 || done.includes(NODES[i - 1].id);
   const nextIdx    = NODES.findIndex((_, i) => isUnlocked(i) && !done.includes(NODES[i].id));
 
-  const finish = () => {
+  const finish = async () => {
     if (!active) return;
     const nodeId = active.id;
     setDone(prev => [...prev, nodeId]);
     setActive(null);
     const pid = localStorage.getItem("profile_id");
+    console.log("[PathMap] saving:", pid, nodeId);
     if (pid) {
-      supabase.from("progress").upsert(
+      const { data, error } = await supabase.from("progress").upsert(
         { profile_id: pid, node_id: nodeId, completed_at: new Date().toISOString() },
         { onConflict: "profile_id,node_id" }
       );
+      console.log("[PathMap] save result:", data, error);
+    } else {
+      console.log("[PathMap] save skipped: pid is null");
     }
   };
 
