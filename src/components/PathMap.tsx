@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { chapter1, type PathNode, type NodeType } from "@/data/chapter1";
+import { supabase } from "@/lib/supabase";
 
 /* ─── layout ──────────────────────────────────────────────────────────────── */
 const NS     = 64;
@@ -685,11 +686,28 @@ function ChallengeView({ node, onDone }: { node: PathNode; onDone: () => void })
    MAIN COMPONENT
    ════════════════════════════════════════════════════════════════════════════ */
 export default function PathMap() {
-  const [done,   setDone]   = useState<string[]>([]);
-  const [active, setActive] = useState<PathNode | null>(null);
-  const containerRef        = useRef<HTMLDivElement>(null);
-  const [cw, setCw]         = useState(0);
-  const NODES               = chapter1.nodes;
+  const [done,      setDone]      = useState<string[]>([]);
+  const [active,    setActive]    = useState<PathNode | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const containerRef              = useRef<HTMLDivElement>(null);
+  const [cw, setCw]               = useState(0);
+  const NODES                     = chapter1.nodes;
+
+  /* ── Load progress from Supabase on mount ─────────────────────────────── */
+  useEffect(() => {
+    const pid = localStorage.getItem("profile_id");
+    setProfileId(pid);
+    if (!pid) { setLoading(false); return; }
+    supabase
+      .from("progress")
+      .select("node_id")
+      .eq("profile_id", pid)
+      .then(({ data }) => {
+        if (data) setDone(data.map((r: { node_id: string }) => r.node_id));
+        setLoading(false);
+      });
+  }, []);
 
   /* ── BrandLink event → close detail ───────────────────────────────────── */
   useEffect(() => {
@@ -732,13 +750,29 @@ export default function PathMap() {
 
   const finish = () => {
     if (!active) return;
-    setDone(prev => [...prev, active.id]);
+    const nodeId = active.id;
+    setDone(prev => [...prev, nodeId]);
     setActive(null);
+    if (profileId) {
+      supabase.from("progress").upsert(
+        { profile_id: profileId, node_id: nodeId, completed_at: new Date().toISOString() },
+        { onConflict: "profile_id,node_id" }
+      );
+    }
   };
 
   const allPts = pts.map(p => ({ x: p.cx, y: p.cy }));
   const fullD  = makePath(allPts);
   const doneD  = done.length > 0 ? makePath(allPts.slice(0, done.length + 1)) : "";
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
+        <span className="text-4xl">🗺️</span>
+        <p className="text-sm font-medium" style={{ color: "#9e9288" }}>Načítám cestu…</p>
+      </div>
+    );
+  }
 
   return (
     <div>
