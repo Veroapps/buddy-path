@@ -756,9 +756,10 @@ export default function PathMap() {
     const nodeId = active.id;
     setDone(prev => [...prev, nodeId]);
     setActive(null);
-    if (profileId) {
+    const pid = localStorage.getItem("profile_id");
+    if (pid) {
       supabase.from("progress").upsert(
-        { profile_id: profileId, node_id: nodeId, completed_at: new Date().toISOString() },
+        { profile_id: pid, node_id: nodeId, completed_at: new Date().toISOString() },
         { onConflict: "profile_id,node_id" }
       );
     }
