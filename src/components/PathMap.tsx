@@ -716,8 +716,9 @@ export default function PathMap() {
     return () => window.removeEventListener("brand-click", handler);
   }, []);
 
-  /* ── ResizeObserver — never set cw to 0 (element hidden = display:none) ─ */
+  /* ── ResizeObserver — re-run after loading so containerRef is in DOM ──── */
   useEffect(() => {
+    if (loading) return;
     const el = containerRef.current;
     if (!el) return;
     const obs = new ResizeObserver(() => {
@@ -727,7 +728,7 @@ export default function PathMap() {
     obs.observe(el);
     if (el.offsetWidth > 0) setCw(el.offsetWidth);
     return () => obs.disconnect();
-  }, []);
+  }, [loading]);
 
   /* ── Re-measure when returning from detail view ───────────────────────── */
   useEffect(() => {
