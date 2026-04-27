@@ -697,13 +697,15 @@ export default function PathMap() {
   /* ── Load progress from Supabase on mount ─────────────────────────────── */
   useEffect(() => {
     const pid = localStorage.getItem("profile_id");
+    console.log("[PathMap] profile_id from localStorage:", pid);
     setProfileId(pid);
     if (!pid) { setLoading(false); return; }
     supabase
       .from("progress")
       .select("node_id")
       .eq("profile_id", pid)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        console.log("[PathMap] loaded progress:", data, "error:", error);
         if (data) setDone(data.map((r: { node_id: string }) => r.node_id));
         setLoading(false);
       });
