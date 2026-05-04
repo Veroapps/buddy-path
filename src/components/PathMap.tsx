@@ -1520,32 +1520,33 @@ export default function PathMap() {
 
   /* ── Load progress from Supabase on mount ─────────────────────────────── */
   useEffect(() => {
-    const pid = localStorage.getItem("profile_id");
-    console.log("[PathMap] profile_id from localStorage:", pid);
-    setProfileId(pid);
-    if (!pid) { setLoading(false); return; }
+    async function loadProgress() {
+      const pid = localStorage.getItem("profile_id");
+      console.log("[PathMap] profile_id from localStorage:", pid);
+      setProfileId(pid);
+      if (!pid) { setLoading(false); return; }
 
-    if (pid.startsWith("local_")) {
-      const saved = localStorage.getItem("progress_local");
-      if (saved) setDone(JSON.parse(saved));
-      setLoading(false);
-      return;
-    }
-
-    supabase
-      .from("progress")
-      .select("node_id")
-      .eq("profile_id", pid)
-      .then(({ data, error }) => {
-        console.log("[PathMap] loaded progress:", data, "error:", error);
-        if (data) setDone(data.map((r: { node_id: string }) => r.node_id));
-        setLoading(false);
-      })
-      .catch(() => {
+      if (pid.startsWith("local_")) {
         const saved = localStorage.getItem("progress_local");
         if (saved) setDone(JSON.parse(saved));
         setLoading(false);
-      });
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("progress")
+          .select("node_id")
+          .eq("profile_id", pid);
+        console.log("[PathMap] loaded progress:", data, "error:", error);
+        if (data) setDone(data.map((r: { node_id: string }) => r.node_id));
+      } catch {
+        const saved = localStorage.getItem("progress_local");
+        if (saved) setDone(JSON.parse(saved));
+      }
+      setLoading(false);
+    }
+    loadProgress();
   }, []);
 
   /* ── BrandLink event → close detail ───────────────────────────────────── */
