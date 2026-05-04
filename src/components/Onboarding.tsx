@@ -20,18 +20,29 @@ export default function Onboarding({ onComplete }: Props) {
     if (!name.trim() || !avatar) return;
     setSaving(true);
     setError("");
-    const { data, error: err } = await supabase
-      .from("profiles")
-      .insert({ name: name.trim(), avatar })
-      .select("id")
-      .single();
-    if (err || !data) {
-      setError("Nepodařilo se uložit profil. Zkus to znovu.");
-      setSaving(false);
-      return;
+
+    const trimmedName = name.trim();
+    let profileId: string | null = null;
+
+    try {
+      const { data, error: err } = await supabase
+        .from("profiles")
+        .insert({ name: trimmedName, avatar })
+        .select("id")
+        .single();
+      if (!err && data) {
+        profileId = data.id;
+      }
+    } catch {
+      // Supabase nedostupný — pokračujeme s lokálním profilem
     }
-    localStorage.setItem("profile_id", data.id);
-    localStorage.setItem("profile_name", name.trim());
+
+    if (!profileId) {
+      profileId = `local_${Date.now()}`;
+    }
+
+    localStorage.setItem("profile_id", profileId);
+    localStorage.setItem("profile_name", trimmedName);
     localStorage.setItem("profile_avatar", avatar);
     setSaving(false);
     onComplete();
