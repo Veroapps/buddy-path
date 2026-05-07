@@ -1,16 +1,32 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { chapter1, type PathNode, type NodeType } from "@/data/chapter1";
+import { chapter1, type PathNode, type NodeType, type Chapter } from "@/data/chapter1";
 import { chapter2 } from "@/data/chapter2";
+import { chapter3 } from "@/data/chapter3";
 import { supabase } from "@/lib/supabase";
+
+const ALL_CHAPTERS: { id: string; number: number; title: string; chapter: Chapter | null }[] = [
+  { id: "ch1",  number: 1,  title: "Všímej si",   chapter: chapter1 },
+  { id: "ch2",  number: 2,  title: "Vzorce",       chapter: chapter2 },
+  { id: "ch3",  number: 3,  title: "Ownership",    chapter: chapter3 },
+  { id: "ch4",  number: 4,  title: "Priority",     chapter: null },
+  { id: "ch5",  number: 5,  title: "Komunikace",   chapter: null },
+  { id: "ch6",  number: 6,  title: "Energie",      chapter: null },
+  { id: "ch7",  number: 7,  title: "Můj hlas",     chapter: null },
+  { id: "ch8",  number: 8,  title: "Strategie",    chapter: null },
+  { id: "ch9",  number: 9,  title: "Feedback",     chapter: null },
+  { id: "ch10", number: 10, title: "Viditelnost",  chapter: null },
+  { id: "ch11", number: 11, title: "Tým",          chapter: null },
+  { id: "ch12", number: 12, title: "Reflexe",      chapter: null },
+];
 
 /* ─── layout ──────────────────────────────────────────────────────────────── */
 const NS     = 64;
 const R      = NS / 2;
 const MASK_R = R - 2;
-const LABEL_W = 110;
-const LABEL_H = 50;
+const LABEL_W = 160;
+const LABEL_H = 66;
 const ROW_H  = 112;
 const GAP    = 10;
 
@@ -1073,80 +1089,154 @@ function CircleOfInfluenceGame({ node, onDone }: { node: PathNode; onDone: () =>
     situations: { text: string; default: "concern" | "influence"; hint: string }[];
   };
   const situations = data.situations;
-  const [choices, setChoices] = useState<Record<number, "concern" | "influence">>(
-    Object.fromEntries(situations.map((s, i) => [i, s.default]))
-  );
-  const [actions, setActions]   = useState<Record<number, string>>({});
-  const [finished, setFinished] = useState(false);
+  const [assignments, setAssignments] = useState<Record<number, "concern" | "influence">>({});
+  const [selected, setSelected]       = useState<number | null>(null);
+  const [dragOver, setDragOver]       = useState<string | null>(null);
+  const [finished, setFinished]       = useState(false);
   const t = TMAP[node.type];
 
-  const concernIdxs = situations.reduce<number[]>((acc, _, i) => choices[i] === "concern" ? [...acc, i] : acc, []);
-  const canSubmit = concernIdxs.every(i => (actions[i] || "").trim().length >= 3);
+  const assign = (idx: number, zone: "concern" | "influence") => {
+    setAssignments(prev => ({ ...prev, [idx]: zone }));
+    setSelected(null);
+  };
+
+  const allAssigned = situations.every((_, i) => assignments[i] !== undefined);
 
   const submit = () => {
-    const result = situations.map((s, i) => ({ text: s.text, choice: choices[i], action: actions[i] || "" }));
+    const result = situations.map((s, i) => ({
+      text: s.text,
+      placed: assignments[i],
+      correct: s.default,
+      isCorrect: assignments[i] === s.default,
+    }));
     saveInsight(node.id, { result }, "");
     setFinished(true);
   };
 
   if (finished) {
-    const influenceCount = situations.filter((_, i) => choices[i] === "influence").length;
+    const correctCount = situations.filter((s, i) => assignments[i] === s.default).length;
     return (
       <div className="space-y-5">
         <NodeHeader node={node} />
-        <div className="rounded-2xl p-8 border text-center" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <div className="rounded-2xl p-6 text-center border" style={{ background: "white", borderColor: "#e8e3db" }}>
           <p className="text-4xl mb-3">⭕</p>
-          <p className="text-2xl font-bold mb-1" style={{ color: "#18283a" }}>{influenceCount} / {situations.length}</p>
-          <p className="text-sm" style={{ color: "#5a6a74" }}>situací v kruhu vlivu</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>{correctCount} / {situations.length}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>situaci spravne zarazeno</p>
+        </div>
+        <div className="space-y-3">
+          {situations.map((s, i) => {
+            const ok = assignments[i] === s.default;
+            return (
+              <div key={i} className="rounded-xl p-4 border" style={{
+                background: ok ? "#e3f4ef" : "#fce9e9",
+                borderColor: ok ? "#c8e8d2" : "#f5cece",
+              }}>
+                <div className="flex items-start gap-2">
+                  <span className="flex-shrink-0 font-bold" style={{ color: ok ? "#2e7a66" : "#a93a3a" }}>{ok ? "✓" : "✗"}</span>
+                  <div>
+                    <p className="text-sm mb-1" style={{ color: "#18283a" }}>{s.text}</p>
+                    <p className="text-xs font-medium" style={{ color: ok ? "#2e7a66" : "#a93a3a" }}>
+                      {s.default === "influence" ? "Kruh vlivu" : "Kruh zajmu"}
+                      {!ok && s.hint ? ` — ${s.hint}` : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
         <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
-          style={{ background: t.btn }}>Pokračovat →</button>
+          style={{ background: t.btn }}>Pokracovat →</button>
       </div>
     );
   }
+
+  const unassigned = situations.reduce<number[]>((acc, _, i) =>
+    assignments[i] === undefined ? [...acc, i] : acc, []);
+  const influenceIdxs = Object.entries(assignments).filter(([, v]) => v === "influence").map(([k]) => parseInt(k));
+  const concernIdxs   = Object.entries(assignments).filter(([, v]) => v === "concern").map(([k]) => parseInt(k));
+
+  const makeDropZone = (zone: "influence" | "concern", label: string, icon: string, color: string, bg: string, border: string, assigned: number[]) => (
+    <div
+      onClick={() => { if (selected !== null) assign(selected, zone); }}
+      onDragOver={e => { e.preventDefault(); setDragOver(zone); }}
+      onDragLeave={() => setDragOver(null)}
+      onDrop={e => {
+        e.preventDefault();
+        const idx = parseInt(e.dataTransfer.getData("card-idx"));
+        if (!isNaN(idx)) assign(idx, zone);
+        setDragOver(null);
+      }}
+      className="flex flex-col items-center rounded-full transition-all"
+      style={{
+        aspectRatio: "1",
+        flex: "1",
+        maxWidth: 170,
+        background: dragOver === zone ? border + "55" : bg,
+        border: `3px solid ${dragOver === zone || selected !== null ? color : border}`,
+        cursor: selected !== null ? "pointer" : "default",
+        padding: "14px 10px",
+        overflow: "hidden",
+      }}>
+      <span className="text-xl mb-1">{icon}</span>
+      <span className="text-[11px] font-bold text-center mb-2" style={{ color }}>{label}</span>
+      <div className="w-full space-y-1 overflow-y-auto" style={{ maxHeight: 90 }}>
+        {assigned.map(i => (
+          <div key={i}
+            className="text-[10px] px-1.5 py-0.5 rounded text-center leading-tight cursor-pointer"
+            style={{ background: color + "22", color }}
+            onClick={e => { e.stopPropagation(); setAssignments(prev => { const n = { ...prev }; delete n[i]; return n; }); }}>
+            {situations[i].text}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-5">
       <NodeHeader node={node} />
       <p className="text-sm px-1 leading-relaxed" style={{ color: "#5a6a74" }}>
-        Zařaď každou situaci. U těch mimo tvůj vliv napiš konkrétní akci.
+        {selected !== null
+          ? "Klikni na kruh, kam kartcka patri. Nebo ji pretahni mysis."
+          : "Klikni na kartrcku, pak na spravny kruh. Na pocitaci muzs i pretahnout."}
       </p>
-      <div className="space-y-3">
-        {situations.map((s, i) => (
-          <div key={i} className="rounded-xl p-4 border transition-colors"
-            style={{ background: "white", borderColor: choices[i] === "influence" ? "#c8e8e1" : "#f5cece" }}>
-            <p className="text-sm mb-3 leading-snug" style={{ color: "#18283a" }}>{s.text}</p>
-            <div className="flex gap-2">
-              <button onClick={() => setChoices(p => ({ ...p, [i]: "influence" }))}
-                className="flex-1 py-2 rounded-lg text-xs font-bold transition-all active:scale-[.97]"
-                style={{
-                  background: choices[i] === "influence" ? "#2e7a66" : "#e3f4ef",
-                  color: choices[i] === "influence" ? "white" : "#2e7a66",
-                }}>Ovlivním ✓</button>
-              <button onClick={() => setChoices(p => ({ ...p, [i]: "concern" }))}
-                className="flex-1 py-2 rounded-lg text-xs font-bold transition-all active:scale-[.97]"
-                style={{
-                  background: choices[i] === "concern" ? "#a93a3a" : "#fce9e9",
-                  color: choices[i] === "concern" ? "white" : "#a93a3a",
-                }}>Neovlivním</button>
-            </div>
-            {choices[i] === "concern" && (
-              <div className="mt-3">
-                {s.hint && <p className="text-[11px] mb-1.5" style={{ color: "#9e9288" }}>💡 {s.hint}</p>}
-                <input value={actions[i] || ""} onChange={e => setActions(p => ({ ...p, [i]: e.target.value }))}
-                  placeholder="Co konkrétně mohu udělat místo toho?"
-                  className="w-full p-2.5 rounded-lg border text-xs focus:outline-none"
-                  style={{ borderColor: "#f5cece", color: "#18283a" }} />
-              </div>
-            )}
-          </div>
-        ))}
+
+      <div className="flex justify-center gap-4">
+        {makeDropZone("influence", "Kruh vlivu", "⭕", "#2e7a66", "#e3f4ef", "#c8e8d2", influenceIdxs)}
+        {makeDropZone("concern",   "Kruh zajmu", "🔴", "#a93a3a", "#fce9e9", "#f5cece", concernIdxs)}
       </div>
-      <button onClick={submit} disabled={!canSubmit}
-        className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{ background: t.btn }}>
-        Zobrazit výsledek →
-      </button>
+
+      {unassigned.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: "#9e9288" }}>
+            Karticky k zarazeni ({unassigned.length})
+          </p>
+          {unassigned.map(i => (
+            <div
+              key={i}
+              draggable
+              onDragStart={e => { e.dataTransfer.setData("card-idx", String(i)); setSelected(null); }}
+              onClick={() => setSelected(selected === i ? null : i)}
+              className="rounded-xl p-3 border cursor-grab active:cursor-grabbing transition-all select-none"
+              style={{
+                background: selected === i ? "#dae8f8" : "white",
+                borderColor: selected === i ? "#2f5fa3" : "#e8e3db",
+                boxShadow: selected === i ? "0 0 0 2px #2f5fa355" : "none",
+              }}>
+              <p className="text-sm leading-snug" style={{ color: "#18283a" }}>{situations[i].text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {unassigned.length === 0 && (
+        <button onClick={submit}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>
+          Zobrazit vysledek →
+        </button>
+      )}
     </div>
   );
 }
@@ -1270,6 +1360,623 @@ function ThreeGenresGame({ node, onDone }: { node: PathNode; onDone: () => void 
   );
 }
 
+/* ── SortInfluenceTimedGame ───────────────────────────────────────────────── */
+function SortInfluenceTimedGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+  const data = node.gameData as {
+    timePerItem: number;
+    situations: { text: string; correct: "concern" | "influence"; flip: string }[];
+  };
+  const { timePerItem, situations } = data;
+  const [idx, setIdx]           = useState(0);
+  const [timeLeft, setTimeLeft] = useState(timePerItem);
+  const [feedback, setFeedback] = useState<{ ok: boolean; flip: string } | null>(null);
+  const [score, setScore]       = useState(0);
+  const [results, setResults]   = useState<{ text: string; answer: string; correct: string }[]>([]);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+  const stateRef = useRef({ idx, score, results });
+  stateRef.current = { idx, score, results };
+
+  const answer = useCallback((choice: "influence" | "concern" | "timeout") => {
+    const { idx, score, results } = stateRef.current;
+    const sit = situations[idx];
+    const ok = choice !== "timeout" && choice === sit.correct;
+    const newScore = score + (ok ? 1 : 0);
+    const newResults = [...results, { text: sit.text, answer: choice, correct: sit.correct }];
+    setFeedback({ ok, flip: sit.correct === "concern" && sit.flip ? sit.flip : "" });
+    setTimeout(() => {
+      setFeedback(null);
+      if (idx + 1 >= situations.length) {
+        saveInsight(node.id, { score: newScore, total: situations.length }, "");
+        setScore(newScore); setResults(newResults); setFinished(true);
+      } else {
+        setScore(newScore); setResults(newResults); setIdx(i => i + 1);
+      }
+    }, 2000);
+  }, [situations, node.id]);
+
+  useEffect(() => {
+    if (finished || feedback) return;
+    setTimeLeft(timePerItem);
+    const tl = { value: timePerItem };
+    const interval = setInterval(() => {
+      tl.value -= 1; setTimeLeft(tl.value);
+      if (tl.value <= 0) { clearInterval(interval); answer("timeout"); }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [idx, finished, feedback, answer, timePerItem]);
+
+  if (finished) {
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-8 text-center border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-5xl mb-4">🎯</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>{score} / {situations.length}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>správných odpovědí</p>
+        </div>
+        <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#9e9288" }}>Přehled</p>
+          <div className="space-y-3">
+            {situations.map((s, i) => {
+              const ok = results[i]?.answer === s.correct;
+              return (
+                <div key={i} className="pb-2 border-b last:border-0" style={{ borderColor: "#f0ece4" }}>
+                  <p className="text-sm" style={{ color: "#18283a" }}>{s.text}</p>
+                  <p className="text-xs mt-1 font-semibold" style={{ color: ok ? "#2e7a66" : "#a93a3a" }}>
+                    {ok ? "✓" : "×"} {s.correct === "influence" ? "Ovlivním" : "Neovlivním"}
+                    {!ok && s.correct === "concern" && s.flip && (
+                      <span style={{ color: "#b87012" }}> — Ale můžeš: {s.flip}</span>
+                    )}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const sit = situations[idx];
+  const pct = timeLeft / timePerItem;
+  const timerColor = pct > 0.5 ? "#2e7a66" : pct > 0.25 ? "#b87012" : "#a93a3a";
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: "#9e9288" }}>
+            {idx + 1} / {situations.length}
+          </p>
+          <span className="text-2xl font-bold tabular-nums" style={{ color: timerColor }}>{timeLeft}s</span>
+        </div>
+        <div className="h-1.5 rounded-full mb-5 overflow-hidden" style={{ background: "#e5e0d8" }}>
+          <div className="h-full rounded-full transition-all duration-1000"
+            style={{ width: `${pct * 100}%`, background: timerColor }} />
+        </div>
+        {feedback ? (
+          <div className="py-8 text-center">
+            <p className="text-4xl mb-2">{feedback.ok ? "✓" : "×"}</p>
+            <p className="font-semibold text-lg" style={{ color: feedback.ok ? "#2e7a66" : "#a93a3a" }}>
+              {feedback.ok ? "Správně!" : "Špatně"}
+            </p>
+            {feedback.flip && (
+              <p className="text-sm mt-3 leading-relaxed" style={{ color: "#b87012" }}>
+                Ale můžeš: {feedback.flip}
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="p-5 rounded-xl mb-5 text-center" style={{ background: "#f5f3ef" }}>
+              <p className="text-base font-semibold leading-snug" style={{ color: "#18283a" }}>{sit.text}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => answer("influence")}
+                className="py-4 rounded-xl font-semibold text-sm active:scale-[.97] transition-transform"
+                style={{ background: "#e3f4ef", color: "#2e7a66" }}>✓ Ovlivním</button>
+              <button onClick={() => answer("concern")}
+                className="py-4 rounded-xl font-semibold text-sm active:scale-[.97] transition-transform"
+                style={{ background: "#fce9e9", color: "#a93a3a" }}>× Neovlivním</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── BlameFlipGame ────────────────────────────────────────────────────────── */
+function BlameFlipGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+  const data = node.gameData as {
+    timePerItem: number;
+    complaints: { complaint: string; options: string[]; correct: number }[];
+  };
+  const { timePerItem, complaints } = data;
+  const [idx, setIdx]           = useState(0);
+  const [timeLeft, setTimeLeft] = useState(timePerItem);
+  const [feedback, setFeedback] = useState<{ ok: boolean; chosen: number } | null>(null);
+  const [score, setScore]       = useState(0);
+  const [results, setResults]   = useState<{ complaint: string; chosen: number; correct: number }[]>([]);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+  const stateRef = useRef({ idx, score, results });
+  stateRef.current = { idx, score, results };
+
+  const answer = useCallback((chosen: number) => {
+    const { idx, score, results } = stateRef.current;
+    const q = complaints[idx];
+    const ok = chosen === q.correct;
+    const newScore = score + (ok ? 1 : 0);
+    const newResults = [...results, { complaint: q.complaint, chosen, correct: q.correct }];
+    setFeedback({ ok, chosen });
+    setTimeout(() => {
+      setFeedback(null);
+      if (idx + 1 >= complaints.length) {
+        saveInsight(node.id, { score: newScore, total: complaints.length }, "");
+        setScore(newScore); setResults(newResults); setFinished(true);
+      } else {
+        setScore(newScore); setResults(newResults); setIdx(i => i + 1);
+      }
+    }, 1800);
+  }, [complaints, node.id]);
+
+  useEffect(() => {
+    if (finished || feedback) return;
+    setTimeLeft(timePerItem);
+    const tl = { value: timePerItem };
+    const interval = setInterval(() => {
+      tl.value -= 1; setTimeLeft(tl.value);
+      if (tl.value <= 0) { clearInterval(interval); answer(-1); }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [idx, finished, feedback, answer, timePerItem]);
+
+  if (finished) {
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-8 text-center border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-5xl mb-4">⚡</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>{score} / {complaints.length}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>Extreme Ownership nalezeno</p>
+        </div>
+        <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#9e9288" }}>Přehled</p>
+          <div className="space-y-4">
+            {complaints.map((q, i) => {
+              const r = results[i];
+              const ok = r?.chosen === q.correct;
+              return (
+                <div key={i} className="pb-3 border-b last:border-0" style={{ borderColor: "#f0ece4" }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: "#9e9288" }}>{q.complaint}</p>
+                  <p className="text-sm" style={{ color: ok ? "#2e7a66" : "#a93a3a" }}>
+                    {ok ? "✓" : "×"} {q.options[q.correct]}
+                  </p>
+                  {!ok && r && r.chosen >= 0 && (
+                    <p className="text-xs mt-1" style={{ color: "#9e9288" }}>Tvoje odpověď: {q.options[r.chosen]}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const q = complaints[idx];
+  const pct = timeLeft / timePerItem;
+  const timerColor = pct > 0.5 ? "#2e7a66" : pct > 0.25 ? "#b87012" : "#a93a3a";
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <div className="flex justify-between items-center mb-2">
+          <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: "#9e9288" }}>
+            {idx + 1} / {complaints.length}
+          </p>
+          <span className="text-2xl font-bold tabular-nums" style={{ color: timerColor }}>{timeLeft}s</span>
+        </div>
+        <div className="h-1.5 rounded-full mb-5 overflow-hidden" style={{ background: "#e5e0d8" }}>
+          <div className="h-full rounded-full transition-all duration-1000"
+            style={{ width: `${pct * 100}%`, background: timerColor }} />
+        </div>
+        <div className="p-4 rounded-xl mb-4" style={{ background: "#fff4e0" }}>
+          <p className="font-semibold text-base leading-snug" style={{ color: "#b87012" }}>{q.complaint}</p>
+        </div>
+        {feedback ? (
+          <div className="py-4 text-center">
+            <p className="text-4xl mb-2">{feedback.ok ? "✓" : "×"}</p>
+            <p className="font-semibold" style={{ color: feedback.ok ? "#2e7a66" : "#a93a3a" }}>
+              {feedback.ok ? "Správně! Extreme Ownership." : "Tohle je výmluva nebo sebemrskání."}
+            </p>
+            {!feedback.ok && (
+              <p className="text-sm mt-2" style={{ color: "#2e7a66" }}>Správně: {q.options[q.correct]}</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {q.options.map((opt, j) => (
+              <button key={j} onClick={() => answer(j)}
+                className="w-full p-3 rounded-xl text-left text-sm font-medium active:scale-[.98] transition-transform"
+                style={{ background: "#f5f3ef", color: "#18283a", border: "1.5px solid #e8e3db" }}>
+                {opt}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── OzSequenceGame ───────────────────────────────────────────────────────── */
+type StepKey = "see" | "own" | "solve" | "do";
+const OZ_ORDER: StepKey[] = ["see", "own", "solve", "do"];
+const OZ_LABELS: Record<StepKey, string> = { see: "See it", own: "Own it", solve: "Solve it", do: "Do it" };
+
+function shuffleKeys(): StepKey[] {
+  const keys: StepKey[] = ["see", "own", "solve", "do"];
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  return keys;
+}
+
+function OzSequenceGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+  const data = node.gameData as {
+    situations: { situation: string; steps: Record<StepKey, string> }[];
+  };
+  const [idx, setIdx]             = useState(0);
+  const [shuffled, setShuffled]   = useState<StepKey[]>(() => shuffleKeys());
+  const [assigned, setAssigned]   = useState<Partial<Record<StepKey, number>>>({});
+  const [nextNum, setNextNum]     = useState(1);
+  const [revealed, setRevealed]   = useState(false);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [finished, setFinished]   = useState(false);
+  const t = TMAP[node.type];
+
+  const situation = data.situations[idx];
+  const allAssigned = Object.keys(assigned).length === 4;
+
+  const clickStep = (key: StepKey) => {
+    if (assigned[key] !== undefined || revealed) return;
+    setAssigned(prev => ({ ...prev, [key]: nextNum }));
+    setNextNum(n => n + 1);
+  };
+
+  const checkAndNext = () => {
+    const isCorrect = OZ_ORDER.every((key, i) => assigned[key] === i + 1);
+    const newCount = correctCount + (isCorrect ? 1 : 0);
+    if (idx + 1 >= data.situations.length) {
+      saveInsight(node.id, { correctCount: newCount, total: data.situations.length }, "");
+      setCorrectCount(newCount); setFinished(true);
+    } else {
+      setCorrectCount(newCount);
+      setIdx(i => i + 1);
+      setShuffled(shuffleKeys());
+      setAssigned({});
+      setNextNum(1);
+      setRevealed(false);
+    }
+  };
+
+  if (finished) {
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-8 text-center border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-5xl mb-4">🧩</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>{correctCount} / {data.situations.length}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>situací seřazeno správně napoprvé</p>
+        </div>
+        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#9e9288" }}>
+          Situace {idx + 1} / {data.situations.length}
+        </p>
+        <div className="p-4 rounded-xl mb-4" style={{ background: "#fff4e0" }}>
+          <p className="font-semibold leading-snug" style={{ color: "#b87012", fontSize: 15 }}>{situation.situation}</p>
+        </div>
+        <p className="text-xs mb-3" style={{ color: "#9e9288" }}>Seřaď kroky: klikni v pořadí 1→2→3→4 (See it → Own it → Solve it → Do it)</p>
+        <div className="space-y-2">
+          {shuffled.map(key => {
+            const num = assigned[key];
+            const correctPos = OZ_ORDER.indexOf(key) + 1;
+            const isCorrectPos = revealed && num === correctPos;
+            const isWrongPos   = revealed && num !== correctPos;
+            return (
+              <button key={key} onClick={() => clickStep(key)}
+                disabled={num !== undefined || revealed}
+                className="w-full p-3 rounded-xl text-left text-sm transition-all"
+                style={{
+                  background: num !== undefined
+                    ? (revealed ? (isCorrectPos ? "#d1fae5" : "#fee2e2") : "#dae8f8")
+                    : "#f5f3ef",
+                  border: `1.5px solid ${num !== undefined
+                    ? (revealed ? (isCorrectPos ? "#6ee7b7" : "#fca5a5") : "#93c5fd")
+                    : "#e5e0d8"}`,
+                  color: "#18283a",
+                  cursor: num !== undefined ? "default" : "pointer",
+                }}>
+                <span className="font-bold mr-2" style={{ color: num !== undefined ? "#2f5fa3" : "#9e9288" }}>
+                  {num !== undefined ? `${num}.` : "·"}
+                </span>
+                {situation.steps[key]}
+                {revealed && num !== undefined && (
+                  <span className="ml-2 text-xs font-semibold" style={{ color: isCorrectPos ? "#16a34a" : "#dc2626" }}>
+                    {isCorrectPos ? `✓ ${OZ_LABELS[key]}` : `× má být ${correctPos}. ${OZ_LABELS[key]}`}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {revealed && (
+          <div className="mt-4 p-3 rounded-xl" style={{ background: "#e3f4ef" }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: "#2e7a66" }}>Správné pořadí:</p>
+            {OZ_ORDER.map((key, i) => (
+              <p key={key} className="text-xs" style={{ color: "#3c4a54" }}>{i + 1}. {situation.steps[key]}</p>
+            ))}
+          </div>
+        )}
+      </div>
+      {allAssigned && !revealed && (
+        <button onClick={() => setRevealed(true)}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Zkontrolovat →</button>
+      )}
+      {revealed && (
+        <button onClick={checkAndNext}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>
+          {idx + 1 < data.situations.length ? "Další situace →" : "Zobrazit výsledek →"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── LocusMeterGame ───────────────────────────────────────────────────────── */
+function LocusMeterGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+  const data = node.gameData as { statements: { text: string; correct: number }[] };
+  const [idx, setIdx]           = useState(0);
+  const [value, setValue]       = useState(50);
+  const [confirmed, setConfirmed] = useState(false);
+  const [results, setResults]   = useState<{ text: string; answer: number; correct: number; diff: number }[]>([]);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const statement = data.statements[idx];
+
+  const confirm = () => {
+    const diff = Math.abs(value - statement.correct);
+    const nr = [...results, { text: statement.text, answer: value, correct: statement.correct, diff }];
+    setResults(nr);
+    setConfirmed(true);
+    if (idx + 1 >= data.statements.length) {
+      saveInsight(node.id, { results: nr, avgDiff: Math.round(nr.reduce((s, r) => s + r.diff, 0) / nr.length) }, "");
+    }
+  };
+
+  const next = () => {
+    if (idx + 1 >= data.statements.length) { setFinished(true); }
+    else { setIdx(i => i + 1); setValue(50); setConfirmed(false); }
+  };
+
+  const diffColor = (diff: number) => diff <= 15 ? "#2e7a66" : diff <= 30 ? "#b87012" : "#a93a3a";
+
+  if (finished) {
+    const avgDiff = Math.round(results.reduce((s, r) => s + r.diff, 0) / results.length);
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-8 text-center border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-5xl mb-4">✈️</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>±{avgDiff}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>průměrná odchylka</p>
+          <p className="text-sm font-semibold mt-3" style={{ color: diffColor(avgDiff) }}>
+            {avgDiff <= 15 ? "Výborný odhad!" : avgDiff <= 30 ? "Dobrý základ." : "Zkus se zamyslet hlouběji."}
+          </p>
+        </div>
+        <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#9e9288" }}>Přehled</p>
+          <div className="space-y-3">
+            {results.map((r, i) => (
+              <div key={i} className="pb-2 border-b last:border-0" style={{ borderColor: "#f0ece4" }}>
+                <p className="text-sm mb-1" style={{ color: "#18283a" }}>{r.text}</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full relative" style={{ background: "#e5e0d8" }}>
+                    <div className="absolute top-0 h-2 w-2 rounded-full -translate-x-1/2" style={{ left: `${r.answer}%`, background: "#2f5fa3" }} />
+                    <div className="absolute top-0 h-2 w-2 rounded-full -translate-x-1/2" style={{ left: `${r.correct}%`, background: "#2e7a66" }} />
+                  </div>
+                  <span className="text-xs font-semibold" style={{ color: diffColor(r.diff) }}>±{r.diff}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] mt-2" style={{ color: "#9e9288" }}>🔵 tvůj odhad &nbsp; 🟢 správně</p>
+        </div>
+        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const diff = confirmed ? Math.abs(value - statement.correct) : 0;
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#9e9288" }}>
+          Výrok {idx + 1} / {data.statements.length}
+        </p>
+        <div className="p-4 rounded-xl mb-5" style={{ background: "#f5f3ef" }}>
+          <p className="font-semibold leading-snug" style={{ color: "#18283a", fontSize: 15 }}>{statement.text}</p>
+        </div>
+        <div className="flex justify-between text-xs font-semibold mb-1" style={{ color: "#9e9288" }}>
+          <span>Oběť okolností</span><span>Pilot</span>
+        </div>
+        <div className="relative mb-2">
+          <input type="range" min={0} max={100} value={value}
+            onChange={e => !confirmed && setValue(parseInt(e.target.value))}
+            className="w-full" style={{ accentColor: "#2f5fa3" }}
+            disabled={confirmed} />
+          {confirmed && (
+            <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white"
+              style={{ left: `calc(${statement.correct}% - 8px)`, background: "#2e7a66", zIndex: 10, pointerEvents: "none" }} />
+          )}
+        </div>
+        <div className="flex justify-between text-[10px]" style={{ color: "#9e9288" }}>
+          <span>0 — Externí</span><span>100 — Interní</span>
+        </div>
+        {confirmed && (
+          <div className="mt-4 p-3 rounded-xl text-center" style={{ background: diffColor(diff) + "18", border: `1px solid ${diffColor(diff)}44` }}>
+            <p className="text-sm font-semibold" style={{ color: diffColor(diff) }}>
+              Odchylka: ±{diff}
+              {diff <= 15 ? " — Přesný odhad! ✓" : diff <= 30 ? " — Blízko" : " — Zkus se zamyslet"}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "#5a6a74" }}>Správná hodnota: {statement.correct}</p>
+          </div>
+        )}
+      </div>
+      {!confirmed ? (
+        <button onClick={confirm}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Potvrdit odhad →</button>
+      ) : (
+        <button onClick={next}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>
+          {idx + 1 < data.statements.length ? "Další výrok →" : "Zobrazit výsledek →"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── BossEmailBuilderGame ─────────────────────────────────────────────────── */
+function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+  const data = node.gameData as { fragments: { text: string; category: "done" | "plan" | "input" | "wrong" }[] };
+  const [assignments, setAssignments] = useState<Record<number, string>>({});
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const ZONES = [
+    { id: "done",  label: "Co jsem udělala",       color: "#2e7a66", bg: "#e3f4ef" },
+    { id: "plan",  label: "Co plánuji",             color: "#2f5fa3", bg: "#eaf3fc" },
+    { id: "input", label: "Kde potřebuji input",    color: "#b87012", bg: "#fff4e0" },
+    { id: "wrong", label: "Vyhodit",                color: "#9e9288", bg: "#f5f3ef" },
+  ];
+
+  const allAssigned = data.fragments.every((_, i) => assignments[i] !== undefined);
+
+  const submit = () => {
+    const correct = data.fragments.filter((f, i) => assignments[i] === f.category).length;
+    saveInsight(node.id, { correct, total: data.fragments.length, assignments }, "");
+    setFinished(true);
+  };
+
+  if (finished) {
+    const correct = data.fragments.filter((f, i) => assignments[i] === f.category).length;
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-8 text-center border" style={{ background: "white", borderColor: "#e8e3db" }}>
+          <p className="text-5xl mb-4">📧</p>
+          <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>{correct} / {data.fragments.length}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>fragmentů správně zařazeno</p>
+        </div>
+        {ZONES.filter(z => z.id !== "wrong").map(zone => {
+          const frags = data.fragments.filter((f, i) => assignments[i] === zone.id);
+          if (!frags.length) return null;
+          return (
+            <div key={zone.id} className="rounded-2xl p-4 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+              <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: zone.color }}>
+                {zone.label}
+              </p>
+              {frags.map((f, i) => {
+                const origIdx = data.fragments.indexOf(f);
+                const ok = assignments[origIdx] === f.category;
+                return (
+                  <p key={i} className="text-sm mb-1.5 pl-2 border-l-2"
+                    style={{ borderColor: ok ? zone.color : "#fca5a5", color: ok ? "#18283a" : "#a93a3a" }}>
+                    {f.text}
+                  </p>
+                );
+              })}
+            </div>
+          );
+        })}
+        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+          style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      {node.prompt && (
+        <div className="rounded-xl p-4 border" style={{ background: "#fff4e0", borderColor: "#fde8c4" }}>
+          <p className="text-sm leading-relaxed" style={{ color: "#b87012" }}>{node.prompt}</p>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        {ZONES.map(z => (
+          <div key={z.id} className="rounded-xl px-3 py-2 text-xs font-bold"
+            style={{ background: z.bg, color: z.color }}>
+            {z.label}
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {data.fragments.map((f, i) => (
+          <div key={i} className="rounded-xl border p-3" style={{ background: "white", borderColor: assignments[i] !== undefined ? "#c8e8e1" : "#e8e3db" }}>
+            <p className="text-sm mb-2.5" style={{ color: "#18283a" }}>{f.text}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {ZONES.map(z => (
+                <button key={z.id}
+                  onClick={() => setAssignments(prev => ({ ...prev, [i]: z.id }))}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all active:scale-[.97]"
+                  style={{
+                    background: assignments[i] === z.id ? z.color : z.bg,
+                    color: assignments[i] === z.id ? "white" : z.color,
+                  }}>
+                  {z.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={submit} disabled={!allAssigned}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        Sestavit mail →
+      </button>
+    </div>
+  );
+}
+
 /* ── GameView router ──────────────────────────────────────────────────────── */
 function GameView({ node, onDone }: { node: PathNode; onDone: () => void }) {
   if (node.gameType === "the-gap")             return <TheGapGame            node={node} onDone={onDone} />;
@@ -1284,6 +1991,11 @@ function GameView({ node, onDone }: { node: PathNode; onDone: () => void }) {
   if (node.gameType === "devils-advocate")     return <DevilsAdvocateGame    node={node} onDone={onDone} />;
   if (node.gameType === "circle-of-influence") return <CircleOfInfluenceGame node={node} onDone={onDone} />;
   if (node.gameType === "three-genres")        return <ThreeGenresGame       node={node} onDone={onDone} />;
+  if (node.gameType === "sort-influence-timed") return <SortInfluenceTimedGame node={node} onDone={onDone} />;
+  if (node.gameType === "blame-flip")           return <BlameFlipGame          node={node} onDone={onDone} />;
+  if (node.gameType === "oz-sequence")          return <OzSequenceGame         node={node} onDone={onDone} />;
+  if (node.gameType === "locus-meter")          return <LocusMeterGame         node={node} onDone={onDone} />;
+  if (node.gameType === "boss-email-builder")   return <BossEmailBuilderGame   node={node} onDone={onDone} />;
   const t = TMAP[node.type];
   return (
     <div className="space-y-5">
@@ -1517,6 +2229,10 @@ export default function PathMap() {
   const NODES                               = currentChapter.nodes;
   const POS                                 = computePos(NODES.length);
   const chapterDoneCount                    = NODES.filter(n => done.includes(n.id)).length;
+  const allChapterNodes                     = ALL_CHAPTERS.filter(c => c.chapter !== null).flatMap(c => c.chapter!.nodes);
+  const totalNodeCount                      = allChapterNodes.length;
+  const totalDoneCount                      = done.filter(id => allChapterNodes.some(n => n.id === id)).length;
+  const totalProgressPct                    = totalNodeCount > 0 ? Math.round((totalDoneCount / totalNodeCount) * 100) : 0;
 
   /* ── Load progress from Supabase on mount ─────────────────────────────── */
   useEffect(() => {
@@ -1658,35 +2374,73 @@ export default function PathMap() {
             <p className="text-base max-w-md mx-auto" style={{ color: "#5a6a74" }}>{currentChapter.description}</p>
           </div>
 
-          <div className="flex gap-2 mb-5">
-            <button
-              onClick={() => setCurrentChapter(chapter1)}
-              className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-colors"
-              style={{
-                background: currentChapter.id === "ch1" ? "#2e7a55" : "#e5e0d8",
-                color: currentChapter.id === "ch1" ? "white" : "#7a7570",
-              }}>
-              1. Všímej si
-            </button>
-            <button
-              onClick={() => setCurrentChapter(chapter2)}
-              className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-colors"
-              style={{
-                background: currentChapter.id === "ch2" ? "#2e7a55" : "#e5e0d8",
-                color: currentChapter.id === "ch2" ? "white" : "#7a7570",
-              }}>
-              2. Vzorce
-            </button>
+          <div className="overflow-x-auto -mx-5 px-5 mb-5">
+            <div className="flex gap-2" style={{ minWidth: "max-content" }}>
+              {ALL_CHAPTERS.map((ch, i) => {
+                const prevCh = i > 0 ? ALL_CHAPTERS[i - 1] : null;
+                const isUnlockedCh = ch.chapter != null || (prevCh?.chapter != null && prevCh.chapter.nodes.every(n => done.includes(n.id)));
+                const isActive = currentChapter.id === ch.id;
+                const canClick = isUnlockedCh && ch.chapter != null;
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => { if (canClick) setCurrentChapter(ch.chapter!); }}
+                    disabled={!canClick}
+                    className="py-2 px-3 rounded-xl font-semibold text-xs whitespace-nowrap transition-colors"
+                    style={{
+                      background: isActive ? "#2e7a55" : canClick ? "#e5e0d8" : "#f0ede8",
+                      color: isActive ? "white" : canClick ? "#5a6a74" : "#c0bab3",
+                      cursor: canClick ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    {!isUnlockedCh ? "🔒 " : ""}{ch.number}. {ch.title}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 mb-7">
+          <div className="flex items-center gap-3 mb-2">
             <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "#e5e0d8" }}>
               <div className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${Math.round((chapterDoneCount / NODES.length) * 100)}%`, background: "linear-gradient(90deg,#2f5fa3,#5590d4)" }} />
+                style={{ width: `${totalProgressPct}%`, background: "linear-gradient(90deg,#2f5fa3,#5590d4)" }} />
             </div>
             <span className="text-sm font-bold tabular-nums w-10 text-right" style={{ color: "#2f5fa3" }}>
-              {Math.round((chapterDoneCount / NODES.length) * 100)}%
+              {totalProgressPct}%
             </span>
+          </div>
+          <div className="flex items-center justify-between mb-7">
+            <p className="text-[11px]" style={{ color: "#9e9288" }}>
+              Celkovy pokrok: {totalDoneCount} / {totalNodeCount} uzlu
+            </p>
+            <button
+              onClick={() => {
+                const insights    = JSON.parse(localStorage.getItem("user_insights")      || "[]");
+                const evaluations = JSON.parse(localStorage.getItem("buddy_evaluations") || "[]");
+                const notes       = localStorage.getItem("buddy_notes") || "";
+                const profile     = localStorage.getItem("profile_id") || "neznamy";
+                const date        = new Date().toISOString().slice(0, 10);
+                const exportData  = {
+                  datumExportu:    new Date().toISOString(),
+                  profil:          profile,
+                  reflexeAOdpovedi: insights,
+                  hotoveUzly:      done,
+                  celkovyPokrok:   `${totalProgressPct}%`,
+                  poznamky:        notes,
+                  hodnoceniKoucky: evaluations,
+                };
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `buddy-path-export-${date}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="text-[11px] px-3 py-1 rounded-lg font-medium transition-colors hover:opacity-80"
+              style={{ background: "#e5e0d8", color: "#5a6a74" }}>
+              Export
+            </button>
           </div>
 
           <div className="flex justify-center flex-wrap gap-5 mb-10">
@@ -1767,11 +2521,12 @@ export default function PathMap() {
                       {t.icon} {t.label}
                     </span>
                     <p className="text-[11px] font-semibold leading-tight"
+                      title={node.title}
                       style={{
                         color: isDone ? "#1e5e38" : isUn ? "#18283a" : "#a8a39e",
                         overflow: "hidden",
                         display: "-webkit-box",
-                        WebkitLineClamp: 2,
+                        WebkitLineClamp: 3,
                         WebkitBoxOrient: "vertical",
                       }}>
                       {node.title}
@@ -1787,8 +2542,10 @@ export default function PathMap() {
               style={{ background: "linear-gradient(135deg,#eaf3fc,#dae8f8)" }}>
               <div className="text-5xl mb-3">🎉</div>
               <h2 className="text-2xl font-bold" style={{ color: "#18283a" }}>Kapitola {currentChapter.number} dokončena!</h2>
-              {currentChapter.id === "ch1" && (
-                <p className="mt-2" style={{ color: "#2f5fa3" }}>Kapitola 2 je odemčena.</p>
+              {ALL_CHAPTERS.some(ch => ch.number === currentChapter.number + 1) && (
+                <p className="mt-2" style={{ color: "#2f5fa3" }}>
+                  Kapitola {currentChapter.number + 1} je odemčena.
+                </p>
               )}
             </div>
           )}
