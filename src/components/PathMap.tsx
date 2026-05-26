@@ -144,7 +144,7 @@ function Quote({ cz, en, author, accent }: { cz: string; en?: string; author?: s
 /* ════════════════════════════════════════════════════════════════════════════
    THEORY VIEW
    ════════════════════════════════════════════════════════════════════════════ */
-function TheoryView({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function TheoryView({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const t = TMAP[node.type];
   return (
     <div className="space-y-5">
@@ -178,7 +178,7 @@ function TheoryView({ node, onDone }: { node: PathNode; onDone: () => void }) {
         <Quote cz={node.quote_cz} en={node.quote_en} author={node.quote_author} accent={t.accent} />
       )}
 
-      <button onClick={() => { saveInsight(node.id, {}, ""); onDone(); }}
+      <button onClick={() => onDone({})}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
         style={{ background: t.btn }}>
         Pokračovat →
@@ -192,7 +192,7 @@ function TheoryView({ node, onDone }: { node: PathNode; onDone: () => void }) {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* ── The Gap ──────────────────────────────────────────────────────────────── */
-function TheGapGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function TheGapGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const [gap, setGap] = useState(10);
   const unlocked = gap >= 200;
   const t = TMAP[node.type];
@@ -224,7 +224,7 @@ function TheGapGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
       {unlocked && node.quote_cz && (
         <Quote cz={node.quote_cz} en={node.quote_en} author={node.quote_author} accent={t.accent} />
       )}
-      <button onClick={() => { saveInsight(node.id, { gap }, ""); onDone(); }}
+      <button onClick={() => onDone({ gap })}
         disabled={!unlocked}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: t.btn }}>
@@ -235,7 +235,7 @@ function TheGapGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
 }
 
 /* ── Fact or Story ────────────────────────────────────────────────────────── */
-function FactOrStoryGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function FactOrStoryGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const cards = node.cards ?? [];
   const isAdvanced = node.id === "n11";
   const [idx, setIdx] = useState(0);
@@ -259,7 +259,6 @@ function FactOrStoryGame({ node, onDone }: { node: PathNode; onDone: () => void 
         const key = isAdvanced ? "story_bias_n11" : "story_bias_n4";
         localStorage.setItem(key, String(bias));
         localStorage.setItem("story_bias_index", String(bias));
-        saveInsight(node.id, { score: nextCorrect, story_bias_index: bias }, "");
         setFinalScore(nextCorrect);
         setFinished(true);
       } else {
@@ -301,7 +300,7 @@ function FactOrStoryGame({ node, onDone }: { node: PathNode; onDone: () => void 
             </p>
           )}
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ score: finalScore, total: cards.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -371,7 +370,7 @@ function FactOrStoryGame({ node, onDone }: { node: PathNode; onDone: () => void 
 }
 
 /* ── Body Map ─────────────────────────────────────────────────────────────── */
-function BodyMapGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function BodyMapGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const areas = node.bodyAreas ?? ["hlava", "krk", "hruď", "břicho", "ruce", "nohy"];
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [lastClicked, setLastClicked] = useState<string | null>(null);
@@ -444,8 +443,7 @@ function BodyMapGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
       <button onClick={() => {
         const pts = Array.from(sel);
         localStorage.setItem("somatic_trigger_points", JSON.stringify(pts));
-        saveInsight(node.id, { somatic_trigger_points: pts }, "");
-        onDone();
+        onDone({ somatic_trigger_points: pts });
       }} disabled={sel.size === 0}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: t.btn }}>
@@ -456,7 +454,7 @@ function BodyMapGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
 }
 
 /* ── Highlight Words ──────────────────────────────────────────────────────── */
-function HighlightWordsGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function HighlightWordsGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { sentences: { text: string; reactive: string[] }[] };
   const sentences = data.sentences;
   const [idx, setIdx] = useState(0);
@@ -513,7 +511,6 @@ function HighlightWordsGame({ node, onDone }: { node: PathNode; onDone: () => vo
     const newTotal = totalScore + correctFound;
     setTotalScore(newTotal);
     if (idx + 1 >= sentences.length) {
-      saveInsight(node.id, { score: newTotal }, "");
       setFinished(true);
     } else {
       setIdx(i => i + 1);
@@ -531,7 +528,7 @@ function HighlightWordsGame({ node, onDone }: { node: PathNode; onDone: () => vo
           <p className="text-3xl font-bold mb-2" style={{ color: "#18283a" }}>{totalScore} / {total}</p>
           <p className="text-sm" style={{ color: "#5a6a74" }}>reaktivních slov nalezeno</p>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ score: totalScore })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -584,7 +581,7 @@ function HighlightWordsGame({ node, onDone }: { node: PathNode; onDone: () => vo
 }
 
 /* ── Emotion Picker ───────────────────────────────────────────────────────── */
-function EmotionPickerGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function EmotionPickerGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as {
     scenarios: { situation: string; topEmotions: string[]; deeperOptions: Record<string, string[]> }[];
   };
@@ -600,7 +597,7 @@ function EmotionPickerGame({ node, onDone }: { node: PathNode; onDone: () => voi
     if (!selectedTop || !selectedDeep) return;
     const nh = [...history, { top: selectedTop, deep: selectedDeep }];
     setHistory(nh);
-    if (idx + 1 >= data.scenarios.length) { saveInsight(node.id, { history: nh }, ""); setFinished(true); }
+    if (idx + 1 >= data.scenarios.length) { setFinished(true); }
     else { setIdx(i => i + 1); setTop(null); setDeep(null); }
   };
 
@@ -619,7 +616,7 @@ function EmotionPickerGame({ node, onDone }: { node: PathNode; onDone: () => voi
             </div>
           ))}
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ history })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -682,7 +679,7 @@ function EmotionPickerGame({ node, onDone }: { node: PathNode; onDone: () => voi
 }
 
 /* ── Add Yet ──────────────────────────────────────────────────────────────── */
-function AddYetGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function AddYetGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { sentences: { fixed: string; hint: string }[] };
   const sentences = data.sentences;
   const [idx, setIdx]           = useState(0);
@@ -695,7 +692,7 @@ function AddYetGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
     if (!text.trim()) return;
     const nr = [...rewrites, text.trim()];
     setRewrites(nr);
-    if (idx + 1 >= sentences.length) { saveInsight(node.id, { rewrites: nr }, ""); setFinished(true); }
+    if (idx + 1 >= sentences.length) { setFinished(true); }
     else { setIdx(i => i + 1); setText(""); }
   };
 
@@ -714,7 +711,7 @@ function AddYetGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
             ))}
           </div>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ rewrites })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -747,7 +744,7 @@ function AddYetGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
 }
 
 /* ── Softener ─────────────────────────────────────────────────────────────── */
-function SoftenerGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function SoftenerGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { sentences: { hard: string; hint: string }[] };
   const sentences = data.sentences;
   const [idx, setIdx]           = useState(0);
@@ -760,7 +757,7 @@ function SoftenerGame({ node, onDone }: { node: PathNode; onDone: () => void }) 
     if (!text.trim()) return;
     const nr = [...rewrites, text.trim()];
     setRewrites(nr);
-    if (idx + 1 >= sentences.length) { saveInsight(node.id, { rewrites: nr }, ""); setFinished(true); }
+    if (idx + 1 >= sentences.length) { setFinished(true); }
     else { setIdx(i => i + 1); setText(""); }
   };
 
@@ -779,7 +776,7 @@ function SoftenerGame({ node, onDone }: { node: PathNode; onDone: () => void }) 
             ))}
           </div>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ rewrites })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -812,7 +809,7 @@ function SoftenerGame({ node, onDone }: { node: PathNode; onDone: () => void }) 
 }
 
 /* ── Rewrite Speed ────────────────────────────────────────────────────────── */
-function RewriteSpeedGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function RewriteSpeedGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { sentences: string[]; timePerSentence: number };
   const { sentences, timePerSentence } = data;
   const [idx, setIdx]           = useState(0);
@@ -828,7 +825,7 @@ function RewriteSpeedGame({ node, onDone }: { node: PathNode; onDone: () => void
     const { idx, text, rewrites } = stateRef.current;
     const nr = [...rewrites, { sentence: sentences[idx], rewrite: text.trim() || "(prázdné)", inTime: !timedOut }];
     setRewrites(nr);
-    if (idx + 1 >= sentences.length) { saveInsight(node.id, { rewrites: nr }, ""); setFinished(true); }
+    if (idx + 1 >= sentences.length) { setFinished(true); }
     else { setIdx(i => i + 1); setText(""); }
   }, [sentences, node.id]);
 
@@ -865,7 +862,7 @@ function RewriteSpeedGame({ node, onDone }: { node: PathNode; onDone: () => void
             ))}
           </div>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ rewrites })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -906,7 +903,7 @@ function RewriteSpeedGame({ node, onDone }: { node: PathNode; onDone: () => void
 }
 
 /* ── Espoused vs Actual ───────────────────────────────────────────────────── */
-function EspousedVsActualGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function EspousedVsActualGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as {
     scenarios: { situation: string; idealLabel: string; realLabel: string }[];
   };
@@ -923,7 +920,7 @@ function EspousedVsActualGame({ node, onDone }: { node: PathNode; onDone: () => 
     if (!ideal.trim() || !real.trim()) return;
     const nr = [...results, { situation: scenarios[idx].situation, ideal: ideal.trim(), real: real.trim(), gap }];
     setResults(nr);
-    if (idx + 1 >= scenarios.length) { saveInsight(node.id, { results: nr }, ""); setFinished(true); }
+    if (idx + 1 >= scenarios.length) { setFinished(true); }
     else { setIdx(i => i + 1); setIdeal(""); setReal(""); setGap(5); }
   };
 
@@ -949,7 +946,7 @@ function EspousedVsActualGame({ node, onDone }: { node: PathNode; onDone: () => 
             </div>
           ))}
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ results })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1004,7 +1001,7 @@ function EspousedVsActualGame({ node, onDone }: { node: PathNode; onDone: () => 
 }
 
 /* ── Devil's Advocate ─────────────────────────────────────────────────────── */
-function DevilsAdvocateGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function DevilsAdvocateGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { beliefs: string[]; biasOptions: string[]; timePerBelief: number };
   const { beliefs, biasOptions, timePerBelief } = data;
   const [idx, setIdx]           = useState(0);
@@ -1022,7 +1019,7 @@ function DevilsAdvocateGame({ node, onDone }: { node: PathNode; onDone: () => vo
     const { idx, pro, contra, bias, results } = stateRef.current;
     const nr = [...results, { belief: beliefs[idx], pro: pro || "—", contra: contra || "—", bias: bias || "—" }];
     setResults(nr);
-    if (idx + 1 >= beliefs.length) { saveInsight(node.id, { results: nr }, ""); setFinished(true); }
+    if (idx + 1 >= beliefs.length) { setFinished(true); }
     else { setIdx(i => i + 1); setPro(""); setContra(""); setBias(""); }
   }, [beliefs, node.id]);
 
@@ -1052,7 +1049,7 @@ function DevilsAdvocateGame({ node, onDone }: { node: PathNode; onDone: () => vo
             </div>
           ))}
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ results })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1114,7 +1111,7 @@ function DevilsAdvocateGame({ node, onDone }: { node: PathNode; onDone: () => vo
 }
 
 /* ── Circle of Influence ──────────────────────────────────────────────────── */
-function CircleOfInfluenceGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function CircleOfInfluenceGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as {
     situations: { text: string; default: "concern" | "influence"; hint: string }[];
   };
@@ -1139,7 +1136,6 @@ function CircleOfInfluenceGame({ node, onDone }: { node: PathNode; onDone: () =>
       correct: s.default,
       isCorrect: assignments[i] === s.default,
     }));
-    saveInsight(node.id, { result }, "");
     setFinished(true);
   };
 
@@ -1175,7 +1171,10 @@ function CircleOfInfluenceGame({ node, onDone }: { node: PathNode; onDone: () =>
             );
           })}
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => {
+          const result = situations.map((s, i) => ({ text: s.text, placed: assignments[i], correct: s.default }));
+          onDone({ result });
+        }} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokracovat →</button>
       </div>
     );
@@ -1272,7 +1271,7 @@ function CircleOfInfluenceGame({ node, onDone }: { node: PathNode; onDone: () =>
 }
 
 /* ── Three Genres ─────────────────────────────────────────────────────────── */
-function ThreeGenresGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function ThreeGenresGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { situations: string[]; genres: string[] };
   const { situations, genres } = data;
   const [idx, setIdx]           = useState(0);
@@ -1295,7 +1294,7 @@ function ThreeGenresGame({ node, onDone }: { node: PathNode; onDone: () => void 
     if (!allFilled) return;
     const nr = [...results, { situation: situations[idx], versions: { ...texts }, auto: autoGenre }];
     setResults(nr);
-    if (idx + 1 >= situations.length) { saveInsight(node.id, { results: nr }, ""); setFinished(true); }
+    if (idx + 1 >= situations.length) { setFinished(true); }
     else { setIdx(i => i + 1); setTexts({}); setAuto(""); }
   };
 
@@ -1331,7 +1330,7 @@ function ThreeGenresGame({ node, onDone }: { node: PathNode; onDone: () => void 
             </div>
           ))}
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ results })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1391,7 +1390,7 @@ function ThreeGenresGame({ node, onDone }: { node: PathNode; onDone: () => void 
 }
 
 /* ── SortInfluenceTimedGame ───────────────────────────────────────────────── */
-function SortInfluenceTimedGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function SortInfluenceTimedGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as {
     timePerItem: number;
     situations: { text: string; correct: "concern" | "influence"; flip: string }[];
@@ -1417,7 +1416,6 @@ function SortInfluenceTimedGame({ node, onDone }: { node: PathNode; onDone: () =
     setTimeout(() => {
       setFeedback(null);
       if (idx + 1 >= situations.length) {
-        saveInsight(node.id, { score: newScore, total: situations.length }, "");
         setScore(newScore); setResults(newResults); setFinished(true);
       } else {
         setScore(newScore); setResults(newResults); setIdx(i => i + 1);
@@ -1464,7 +1462,7 @@ function SortInfluenceTimedGame({ node, onDone }: { node: PathNode; onDone: () =
             })}
           </div>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ score, total: situations.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1521,7 +1519,7 @@ function SortInfluenceTimedGame({ node, onDone }: { node: PathNode; onDone: () =
 }
 
 /* ── BlameFlipGame ────────────────────────────────────────────────────────── */
-function BlameFlipGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function BlameFlipGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as {
     timePerItem: number;
     complaints: { complaint: string; options: string[]; correct: number }[];
@@ -1547,7 +1545,6 @@ function BlameFlipGame({ node, onDone }: { node: PathNode; onDone: () => void })
     setTimeout(() => {
       setFeedback(null);
       if (idx + 1 >= complaints.length) {
-        saveInsight(node.id, { score: newScore, total: complaints.length }, "");
         setScore(newScore); setResults(newResults); setFinished(true);
       } else {
         setScore(newScore); setResults(newResults); setIdx(i => i + 1);
@@ -1595,7 +1592,7 @@ function BlameFlipGame({ node, onDone }: { node: PathNode; onDone: () => void })
             })}
           </div>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ score, total: complaints.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1662,7 +1659,7 @@ function shuffleKeys(): StepKey[] {
   return keys;
 }
 
-function OzSequenceGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function OzSequenceGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as {
     situations: { situation: string; steps: Record<StepKey, string> }[];
   };
@@ -1688,7 +1685,6 @@ function OzSequenceGame({ node, onDone }: { node: PathNode; onDone: () => void }
     const isCorrect = OZ_ORDER.every((key, i) => assigned[key] === i + 1);
     const newCount = correctCount + (isCorrect ? 1 : 0);
     if (idx + 1 >= data.situations.length) {
-      saveInsight(node.id, { correctCount: newCount, total: data.situations.length }, "");
       setCorrectCount(newCount); setFinished(true);
     } else {
       setCorrectCount(newCount);
@@ -1709,7 +1705,7 @@ function OzSequenceGame({ node, onDone }: { node: PathNode; onDone: () => void }
           <p className="text-3xl font-bold mb-1" style={{ color: "#18283a" }}>{correctCount} / {data.situations.length}</p>
           <p className="text-sm" style={{ color: "#5a6a74" }}>situací seřazeno správně napoprvé</p>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ correctCount, total: data.situations.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1785,7 +1781,7 @@ function OzSequenceGame({ node, onDone }: { node: PathNode; onDone: () => void }
 }
 
 /* ── LocusMeterGame ───────────────────────────────────────────────────────── */
-function LocusMeterGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function LocusMeterGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { statements: { text: string; correct: number }[] };
   const [idx, setIdx]           = useState(0);
   const [value, setValue]       = useState(50);
@@ -1802,7 +1798,6 @@ function LocusMeterGame({ node, onDone }: { node: PathNode; onDone: () => void }
     setResults(nr);
     setConfirmed(true);
     if (idx + 1 >= data.statements.length) {
-      saveInsight(node.id, { results: nr, avgDiff: Math.round(nr.reduce((s, r) => s + r.diff, 0) / nr.length) }, "");
     }
   };
 
@@ -1844,7 +1839,7 @@ function LocusMeterGame({ node, onDone }: { node: PathNode; onDone: () => void }
           </div>
           <p className="text-[10px] mt-2" style={{ color: "#9e9288" }}>🔵 tvůj odhad &nbsp; 🟢 správně</p>
         </div>
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => onDone({ results })} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -1904,7 +1899,7 @@ function LocusMeterGame({ node, onDone }: { node: PathNode; onDone: () => void }
 }
 
 /* ── BossEmailBuilderGame ─────────────────────────────────────────────────── */
-function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const data = node.gameData as { fragments: { text: string; category: "done" | "plan" | "input" | "wrong" }[] };
   const [assignments, setAssignments] = useState<Record<number, string>>({});
   const [finished, setFinished] = useState(false);
@@ -1921,7 +1916,6 @@ function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: () => 
 
   const submit = () => {
     const correct = data.fragments.filter((f, i) => assignments[i] === f.category).length;
-    saveInsight(node.id, { correct, total: data.fragments.length, assignments }, "");
     setFinished(true);
   };
 
@@ -1956,7 +1950,7 @@ function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: () => 
             </div>
           );
         })}
-        <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+        <button onClick={() => { const correctCount = data.fragments.filter((f, i) => assignments[i] === f.category).length; onDone({ correct: correctCount, total: data.fragments.length }); }} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
           style={{ background: t.btn }}>Pokračovat →</button>
       </div>
     );
@@ -2008,7 +2002,7 @@ function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: () => 
 }
 
 /* ── GameView router ──────────────────────────────────────────────────────── */
-function GameView({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function GameView({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   if (node.gameType === "the-gap")             return <TheGapGame            node={node} onDone={onDone} />;
   if (node.gameType === "fact-or-story")       return <FactOrStoryGame       node={node} onDone={onDone} />;
   if (node.gameType === "body-map")            return <BodyMapGame            node={node} onDone={onDone} />;
@@ -2036,7 +2030,7 @@ function GameView({ node, onDone }: { node: PathNode; onDone: () => void }) {
         <p className="font-semibold text-lg" style={{ color: "#18283a" }}>Interaktivní hra</p>
         <p className="text-sm mt-1" style={{ color: "#9e9288" }}>Brzy oživíme!</p>
       </div>
-      <button onClick={onDone} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
+      <button onClick={() => onDone({})} className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
         style={{ background: t.btn }}>Pokračovat →</button>
     </div>
   );
@@ -2438,7 +2432,7 @@ export default function PathMap() {
             ← Zpět na cestu
           </button>
           {active?.type === "theory"     && <TheoryView     node={active} onDone={() => finish()} />}
-          {active?.type === "game"       && <GameView       node={active} onDone={() => finish()} />}
+          {active?.type === "game"       && <GameView       node={active} onDone={(c) => finish(c)} />}
           {active?.type === "reflection" && <ReflectionView node={active} onDone={(c) => finish(c)} />}
           {active?.type === "challenge"  && <ChallengeView  node={active} onDone={(c) => finish(c)} />}
         </div>
