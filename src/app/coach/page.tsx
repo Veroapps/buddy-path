@@ -154,8 +154,7 @@ export default function CoachPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-stone-800">{p.name}</p>
                   <p className="text-xs text-stone-400">
-                    Splněno: {p.completedCount} uzlů · Poslední aktivita:{" "}
-                    {p.last_active ?? "–"}
+                    Splneno: {p.completedCount} uzlu · Aktivita: {p.last_active ?? "–"}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 text-amber-600">

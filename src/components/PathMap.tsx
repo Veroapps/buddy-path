@@ -72,9 +72,39 @@ function labelLeft(cx: number, xPct: number): number {
 
 function saveInsight(nodeId: string, inputData: unknown, textResponse: string) {
   if (typeof window === "undefined") return;
-  const prev = JSON.parse(localStorage.getItem("user_insights") || "[]");
-  prev.push({ timestamp: new Date().toISOString(), node_id: nodeId, input_data: inputData, text_response: textResponse, status: "completed" });
-  localStorage.setItem("user_insights", JSON.stringify(prev));
+
+  try {
+    const prev = JSON.parse(localStorage.getItem("user_insights") || "[]");
+    prev.push({
+      timestamp:     new Date().toISOString(),
+      node_id:       nodeId,
+      input_data:    inputData,
+      text_response: textResponse,
+      status:        "completed",
+    });
+    localStorage.setItem("user_insights", JSON.stringify(prev));
+  } catch (e) {
+    console.error("[saveInsight] localStorage error:", e);
+  }
+
+  const pid = localStorage.getItem("profile_id");
+  if (!pid || pid.startsWith("local_")) return;
+
+  const content: Record<string, unknown> = {
+    ...(inputData && typeof inputData === "object" ? inputData as Record<string, unknown> : {}),
+    ...(textResponse ? { text: textResponse } : {}),
+  };
+
+  (async () => {
+    try {
+      await supabase.from("insights").upsert(
+        { profile_id: pid, node_id: nodeId, content, created_at: new Date().toISOString() },
+        { onConflict: "profile_id,node_id" }
+      );
+    } catch {
+      /* tiché selhání */
+    }
+  })();
 }
 
 /* ─── shared header ───────────────────────────────────────────────────────── */
@@ -2017,7 +2047,7 @@ function GameView({ node, onDone }: { node: PathNode; onDone: () => void }) {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* ── Semafor slider ───────────────────────────────────────────────────────── */
-function SemaforReflection({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function SemaforReflection({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const [value, setValue] = useState(0.3);
   const [popup, setPopup] = useState(false);
   const [popupShown, setPopupShown] = useState(false);
@@ -2073,8 +2103,7 @@ function SemaforReflection({ node, onDone }: { node: PathNode; onDone: () => voi
       )}
       <button onClick={() => {
         localStorage.setItem("semafor_value", String(value));
-        saveInsight(node.id, { semafor_value: value }, "");
-        onDone();
+        onDone({ semafor_value: value });
       }}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform"
         style={{ background: t.btn }}>
@@ -2085,7 +2114,7 @@ function SemaforReflection({ node, onDone }: { node: PathNode; onDone: () => voi
 }
 
 /* ── Mirror Form ──────────────────────────────────────────────────────────── */
-function MirrorForm({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function MirrorForm({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const [fields, setFields] = useState({ fact: "", story: "", feeling: "", choice: "" });
   const t = TMAP[node.type];
   const valid = Object.values(fields).every(v => v.trim().length >= 3);
@@ -2116,8 +2145,7 @@ function MirrorForm({ node, onDone }: { node: PathNode; onDone: () => void }) {
       </div>
       <button onClick={() => {
         localStorage.setItem("mirror_entry", JSON.stringify(fields));
-        saveInsight(node.id, fields, fields.choice);
-        onDone();
+        onDone(fields);
       }} disabled={!valid}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: t.btn }}>
@@ -2128,7 +2156,7 @@ function MirrorForm({ node, onDone }: { node: PathNode; onDone: () => void }) {
 }
 
 /* ── Generic reflection (text area) ──────────────────────────────────────── */
-function GenericReflection({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function GenericReflection({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const [text, setText] = useState("");
   const t = TMAP[node.type];
   const valid = text.trim().length >= 5;
@@ -2142,7 +2170,7 @@ function GenericReflection({ node, onDone }: { node: PathNode; onDone: () => voi
           className="w-full p-4 rounded-xl border min-h-[130px] text-sm leading-relaxed resize-y focus:outline-none"
           style={{ borderColor: t.accentBg }} />
       </div>
-      <button onClick={() => { saveInsight(node.id, {}, text); onDone(); }} disabled={!valid}
+      <button onClick={() => onDone({ text })} disabled={!valid}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: t.btn }}>
         Uložit →
@@ -2152,7 +2180,7 @@ function GenericReflection({ node, onDone }: { node: PathNode; onDone: () => voi
 }
 
 /* ── ReflectionView router ────────────────────────────────────────────────── */
-function ReflectionView({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function ReflectionView({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   if (node.gameType === "semafor-slider") return <SemaforReflection node={node} onDone={onDone} />;
   if (node.gameType === "mirror-form")    return <MirrorForm         node={node} onDone={onDone} />;
   return <GenericReflection node={node} onDone={onDone} />;
@@ -2167,7 +2195,7 @@ const SUMMARY_LABELS = [
   "1 věta navždy",
 ];
 
-function ChallengeView({ node, onDone }: { node: PathNode; onDone: () => void }) {
+function ChallengeView({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   const t = TMAP[node.type];
   const [answers, setAnswers] = useState<string[]>(["", "", "", "", ""]);
   const isSummary = node.challengeDays === 0;
@@ -2205,7 +2233,7 @@ function ChallengeView({ node, onDone }: { node: PathNode; onDone: () => void })
         )}
       </div>
       <button
-        onClick={() => { saveInsight(node.id, isSummary ? { answers } : {}, ""); onDone(); }}
+        onClick={() => onDone(isSummary ? { answers, labels: SUMMARY_LABELS } : {})}
         disabled={isSummary && !answers.some(a => a.trim().length >= 3)}
         className="w-full py-4 rounded-2xl font-semibold text-base text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: t.btn }}>
@@ -2250,15 +2278,33 @@ export default function PathMap() {
       }
 
       try {
-        const { data, error } = await supabase
-          .from("progress")
-          .select("node_id")
-          .eq("profile_id", pid);
-        console.log("[PathMap] loaded progress:", data, "error:", error);
-        if (data) setDone(data.map((r: { node_id: string }) => r.node_id));
+        const [progressRes, insightsRes] = await Promise.all([
+          supabase.from("progress").select("node_id").eq("profile_id", pid),
+          supabase.from("insights").select("*").eq("profile_id", pid),
+        ]);
+
+        console.log("[PathMap] loaded progress:", progressRes.data, "error:", progressRes.error);
+        if (progressRes.data) setDone(progressRes.data.map((r: { node_id: string }) => r.node_id));
+
+        /* Synchronizuj insights do localStorage */
+        if (insightsRes.data && insightsRes.data.length > 0) {
+          const mapped = insightsRes.data.map((r: {
+            created_at: string; node_id: string;
+            input_data: unknown; text_response: string; status: string;
+          }) => ({
+            timestamp:     r.created_at,
+            node_id:       r.node_id,
+            input_data:    r.input_data,
+            text_response: r.text_response,
+            status:        r.status,
+          }));
+          localStorage.setItem("user_insights", JSON.stringify(mapped));
+          console.log("[PathMap] naceteno", mapped.length, "insights ze Supabase");
+        }
       } catch {
         const saved = localStorage.getItem("progress_local");
         if (saved) setDone(JSON.parse(saved));
+        console.log("[PathMap] Supabase neni dostupny — pouzivam localStorage");
       }
       setLoading(false);
     }
@@ -2305,30 +2351,67 @@ export default function PathMap() {
   const isUnlocked = (i: number) => i === 0 || done.includes(NODES[i - 1].id);
   const nextIdx    = NODES.findIndex((_, i) => isUnlocked(i) && !done.includes(NODES[i].id));
 
-  const finish = async () => {
+  const saveInsight = async (
+    nodeId: string,
+    nodeTitle: string,
+    nodeType: string,
+    content: Record<string, unknown>
+  ) => {
+    const pid = localStorage.getItem("profile_id");
+    if (!pid || pid.startsWith("local_")) return;
+    try {
+      await supabase.from("insights").upsert(
+        {
+          profile_id: pid,
+          node_id: nodeId,
+          node_title: nodeTitle,
+          node_type: nodeType,
+          content,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "profile_id,node_id" }
+      );
+    } catch {
+      /* tiché selhání */
+    }
+  };
+
+  const finish = async (content?: Record<string, unknown>) => {
     if (!active) return;
-    const nodeId = active.id;
+    const nodeId    = active.id;
+    const nodeTitle = active.title;
+    const nodeType  = active.type;
+
     setDone(prev => {
       const next = [...prev, nodeId];
       localStorage.setItem("progress_local", JSON.stringify(next));
       return next;
     });
-    setActive(null);
+
+    if (content && Object.keys(content).length > 0) {
+      await saveInsight(nodeId, nodeTitle, nodeType, content);
+    }
+
     const pid = localStorage.getItem("profile_id");
-    console.log("[PathMap] saving:", pid, nodeId);
-    if (!pid || pid.startsWith("local_")) {
-      console.log("[PathMap] local profile — progress saved to localStorage only");
-      return;
+    if (pid && !pid.startsWith("local_")) {
+      try {
+        await supabase.from("progress").upsert(
+          { profile_id: pid, node_id: nodeId, completed_at: new Date().toISOString() },
+          { onConflict: "profile_id,node_id" }
+        );
+      } catch {
+        /* tiché selhání */
+      }
+
+      const today = new Date().toISOString().split("T")[0];
+      try {
+        await supabase.from("profiles").update({ last_active: today }).eq("id", pid);
+      } catch {
+        /* tiché selhání */
+      }
     }
-    try {
-      const { data, error } = await supabase.from("progress").upsert(
-        { profile_id: pid, node_id: nodeId, completed_at: new Date().toISOString() },
-        { onConflict: "profile_id,node_id" }
-      );
-      console.log("[PathMap] save result:", data, error);
-    } catch {
-      console.log("[PathMap] Supabase save failed — progress kept in localStorage");
-    }
+
+    setActive(null);
   };
 
   const allPts = pts.map(p => ({ x: p.cx, y: p.cy }));
@@ -2354,10 +2437,10 @@ export default function PathMap() {
             style={{ color: "#9e9288" }}>
             ← Zpět na cestu
           </button>
-          {active?.type === "theory"     && <TheoryView     node={active} onDone={finish} />}
-          {active?.type === "game"       && <GameView       node={active} onDone={finish} />}
-          {active?.type === "reflection" && <ReflectionView node={active} onDone={finish} />}
-          {active?.type === "challenge"  && <ChallengeView  node={active} onDone={finish} />}
+          {active?.type === "theory"     && <TheoryView     node={active} onDone={() => finish()} />}
+          {active?.type === "game"       && <GameView       node={active} onDone={() => finish()} />}
+          {active?.type === "reflection" && <ReflectionView node={active} onDone={(c) => finish(c)} />}
+          {active?.type === "challenge"  && <ChallengeView  node={active} onDone={(c) => finish(c)} />}
         </div>
       </div>
 
