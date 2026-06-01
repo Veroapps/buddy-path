@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { chapter1 } from "@/data/chapter1";
 import { chapter2 } from "@/data/chapter2";
@@ -154,6 +155,14 @@ export default function HomeHeader() {
             <span className="text-sm">🔥</span>
             <span className="text-sm font-semibold" style={{ color: "#b87012" }}>{streak}</span>
           </div>
+
+          <Link
+            href="/cheatsheet"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full flex-shrink-0 text-xs font-semibold"
+            style={{ background: "#e8f0ea", color: "#2e7a55" }}
+          >
+            📋 Cheat sheet
+          </Link>
 
           {/* Celkovy pokrok % */}
           <span className="text-sm font-bold tabular-nums flex-shrink-0" style={{ color: "#2f5fa3" }}>
