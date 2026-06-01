@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { chapter1, type PathNode, type NodeType, type Chapter } from "@/data/chapter1";
 import { chapter2 } from "@/data/chapter2";
 import { chapter3 } from "@/data/chapter3";
+import { chapter4 } from "@/data/chapter4";
 import { supabase } from "@/lib/supabase";
 
 const ALL_CHAPTERS: { id: string; number: number; title: string; chapter: Chapter | null }[] = [
   { id: "ch1",  number: 1,  title: "Všímej si",   chapter: chapter1 },
   { id: "ch2",  number: 2,  title: "Vzorce",       chapter: chapter2 },
   { id: "ch3",  number: 3,  title: "Ownership",    chapter: chapter3 },
-  { id: "ch4",  number: 4,  title: "Priority",     chapter: null },
+  { id: "ch4",  number: 4,  title: "Priority",     chapter: chapter4 },
   { id: "ch5",  number: 5,  title: "Komunikace",   chapter: null },
   { id: "ch6",  number: 6,  title: "Energie",      chapter: null },
   { id: "ch7",  number: 7,  title: "Můj hlas",     chapter: null },
@@ -2001,6 +2002,587 @@ function BossEmailBuilderGame({ node, onDone }: { node: PathNode; onDone: (conte
   );
 }
 
+/* ── QuadrantSortGame ─────────────────────────────────────────────────────── */
+function QuadrantSortGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    timePerItem: number;
+    items: { text: string; correct: string; explanation: string }[];
+  };
+  const { timePerItem, items } = data;
+  const [idx, setIdx] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(timePerItem);
+  const [feedback, setFeedback] = useState<{ ok: boolean; explanation: string; correct: string } | null>(null);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const QUADRANTS = [
+    { id: "q1", label: "Q1", desc: "Důležité + naléhavé",    color: "#a93a3a", bg: "#fce9e9" },
+    { id: "q2", label: "Q2", desc: "Důležité + nenaléhavé",  color: "#2e7a55", bg: "#e3f4ef" },
+    { id: "q3", label: "Q3", desc: "Naléhavé + nedůležité",  color: "#b07a10", bg: "#fef4e0" },
+    { id: "q4", label: "Q4", desc: "Ani jedno",              color: "#5a6a74", bg: "#f0ede8" },
+  ];
+
+  const stateRef = useRef({ idx, score });
+  stateRef.current = { idx, score };
+
+  const answer = useCallback((choice: string | "timeout") => {
+    const { idx, score } = stateRef.current;
+    const item = items[idx];
+    const ok = choice !== "timeout" && choice === item.correct;
+    setScore(ok ? score + 1 : score);
+    setFeedback({ ok, explanation: item.explanation, correct: item.correct });
+  }, [items]);
+
+  useEffect(() => {
+    if (feedback || finished) return;
+    if (timeLeft <= 0) { answer("timeout"); return; }
+    const timer = setTimeout(() => setTimeLeft(s => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, feedback, finished, answer]);
+
+  const next = () => {
+    setFeedback(null);
+    if (idx + 1 >= items.length) { saveInsight(node.id, { score }, ""); setFinished(true); }
+    else { setIdx(i => i + 1); setTimeLeft(timePerItem); }
+  };
+
+  if (finished) {
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">🗂️</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{score}/{items.length} správně</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>
+            {score >= items.length * 0.8 ? "Výborně — kvadranty máš zmáknuté." : score >= items.length * 0.5 ? "Dobrý základ. Q2 a Q3 jsou nejzáludnější." : "Coveyho matice potřebuje procvičit. Zkus kapitolu znovu."}
+          </p>
+        </div>
+        <button onClick={() => onDone({ score, total: items.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const item = items[idx];
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="flex items-center justify-between px-1 mb-2">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>{idx + 1} / {items.length}</span>
+        <span className="text-sm font-bold tabular-nums" style={{ color: timeLeft <= 3 ? "#a93a3a" : "#5a6a74" }}>{timeLeft}s</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#e8e3db" }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${(timeLeft / timePerItem) * 100}%`, background: timeLeft <= 3 ? "#a93a3a" : "#2f5fa3" }} />
+      </div>
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <p className="text-base font-medium leading-relaxed" style={{ color: "#18283a" }}>{item.text}</p>
+      </div>
+      {feedback ? (
+        <div className="rounded-2xl p-5" style={{ background: feedback.ok ? "#e3f4ef" : "#fce9e9" }}>
+          <p className="font-bold mb-1" style={{ color: feedback.ok ? "#2e7a55" : "#a93a3a" }}>{feedback.ok ? "✓ Správně" : "✗ Jinak"}</p>
+          <p className="text-sm mb-1" style={{ color: "#5a6a74" }}>Správně: {QUADRANTS.find(q => q.id === feedback.correct)?.label} — {QUADRANTS.find(q => q.id === feedback.correct)?.desc}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>{feedback.explanation}</p>
+          <button onClick={next} className="mt-3 w-full py-3 rounded-xl font-semibold text-sm text-white" style={{ background: t.btn }}>
+            {idx + 1 < items.length ? "Další →" : "Výsledky →"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {QUADRANTS.map(q => (
+            <button key={q.id} onClick={() => answer(q.id)}
+              className="py-4 px-3 rounded-2xl font-semibold text-sm transition-all active:scale-[.97]"
+              style={{ background: q.bg, color: q.color }}>
+              <span className="block text-base font-bold">{q.label}</span>
+              <span className="block text-xs mt-0.5 opacity-80">{q.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── ParetoAuditGame ──────────────────────────────────────────────────────── */
+function ParetoAuditGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    categories: { category: string; items: { text: string; value: string }[] }[];
+    instruction: string;
+  };
+  const allItems = data.categories.flatMap((c, ci) => c.items.map((item, ii) => ({ ...item, category: c.category, key: `${ci}-${ii}` })));
+  const [choices, setChoices] = useState<Record<string, string>>({});
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const LEVELS = [
+    { id: "high", label: "HIGH", desc: "Přináší výsledky", color: "#2e7a55", bg: "#e3f4ef" },
+    { id: "medium", label: "MED",  desc: "Průměrné",        color: "#b07a10", bg: "#fef4e0" },
+    { id: "low",  label: "LOW",  desc: "Zabírá čas",       color: "#a93a3a", bg: "#fce9e9" },
+  ];
+
+  const allDone = allItems.every(i => choices[i.key] !== undefined);
+
+  const submit = () => {
+    saveInsight(node.id, { choices }, "");
+    setFinished(true);
+  };
+
+  if (finished) {
+    const highCount = Object.values(choices).filter(v => v === "high").length;
+    const lowCount  = Object.values(choices).filter(v => v === "low").length;
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6" style={{ background: t.bg }}>
+          <p className="text-lg font-bold mb-3" style={{ color: "#18283a" }}>Tvůj Pareto profil</p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold w-10 text-right" style={{ color: "#2e7a55" }}>HIGH</span>
+              <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "#e8e3db" }}>
+                <div className="h-full rounded-full" style={{ width: `${(highCount / allItems.length) * 100}%`, background: "#2e7a55" }} />
+              </div>
+              <span className="text-xs w-8" style={{ color: "#5a6a74" }}>{highCount}×</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold w-10 text-right" style={{ color: "#a93a3a" }}>LOW</span>
+              <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: "#e8e3db" }}>
+                <div className="h-full rounded-full" style={{ width: `${(lowCount / allItems.length) * 100}%`, background: "#a93a3a" }} />
+              </div>
+              <span className="text-xs w-8" style={{ color: "#5a6a74" }}>{lowCount}×</span>
+            </div>
+          </div>
+          <p className="text-sm mt-4" style={{ color: "#5a6a74" }}>
+            {highCount <= 3 ? "Tvoje 20 % je jasné — zaměř se tam." : highCount >= 8 ? "Hodně HIGH? Zkontroluj, zda nehodnotíš příliš velkoryse." : "Dobrý přehled. Co z LOW můžeš přestat dělat?"}
+          </p>
+        </div>
+        <button onClick={() => onDone({ choices })} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <p className="text-sm px-1 leading-relaxed" style={{ color: "#5a6a74" }}>{data.instruction}</p>
+      {data.categories.map((cat, ci) => (
+        <div key={ci}>
+          <p className="text-xs font-bold uppercase tracking-wide mb-3 px-1" style={{ color: "#9e9288" }}>{cat.category}</p>
+          <div className="space-y-2">
+            {cat.items.map((item, ii) => {
+              const key = `${ci}-${ii}`;
+              const chosen = choices[key];
+              return (
+                <div key={ii} className="rounded-xl border p-3" style={{ background: "white", borderColor: chosen ? "#c8e8e1" : "#e8e3db" }}>
+                  <p className="text-sm mb-2" style={{ color: "#18283a" }}>{item.text}</p>
+                  <div className="flex gap-2">
+                    {LEVELS.map(lv => (
+                      <button key={lv.id} onClick={() => setChoices(p => ({ ...p, [key]: lv.id }))}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[.97]"
+                        style={{ background: chosen === lv.id ? lv.color : lv.bg, color: chosen === lv.id ? "white" : lv.color }}>
+                        {lv.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <button onClick={submit} disabled={!allDone}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        Zobrazit Pareto profil →
+      </button>
+    </div>
+  );
+}
+
+/* ── DeepShallowSortGame ──────────────────────────────────────────────────── */
+function DeepShallowSortGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    timePerItem: number;
+    tasks: { text: string; correct: string; explanation: string }[];
+  };
+  const { timePerItem, tasks } = data;
+  const [idx, setIdx] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(timePerItem);
+  const [feedback, setFeedback] = useState<{ ok: boolean; explanation: string } | null>(null);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const stateRef = useRef({ idx, score });
+  stateRef.current = { idx, score };
+
+  const answer = useCallback((choice: string | "timeout") => {
+    const { idx, score } = stateRef.current;
+    const task = tasks[idx];
+    const ok = choice !== "timeout" && choice === task.correct;
+    setScore(ok ? score + 1 : score);
+    setFeedback({ ok, explanation: task.explanation });
+  }, [tasks]);
+
+  useEffect(() => {
+    if (feedback || finished) return;
+    if (timeLeft <= 0) { answer("timeout"); return; }
+    const timer = setTimeout(() => setTimeLeft(s => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, feedback, finished, answer]);
+
+  const next = () => {
+    setFeedback(null);
+    if (idx + 1 >= tasks.length) { saveInsight(node.id, { score }, ""); setFinished(true); }
+    else { setIdx(i => i + 1); setTimeLeft(timePerItem); }
+  };
+
+  if (finished) {
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">🌊</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{score}/{tasks.length} správně</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>
+            {score >= tasks.length * 0.8 ? "Jasně vidíš rozdíl mezi hlubokou a mělkou prací." : "Shallow Work se umí maskovat jako Deep Work. To je jeho záludnost."}
+          </p>
+        </div>
+        <button onClick={() => onDone({ score, total: tasks.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const task = tasks[idx];
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>{idx + 1} / {tasks.length}</span>
+        <span className="text-sm font-bold tabular-nums" style={{ color: timeLeft <= 3 ? "#a93a3a" : "#5a6a74" }}>{timeLeft}s</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#e8e3db" }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${(timeLeft / timePerItem) * 100}%`, background: timeLeft <= 3 ? "#a93a3a" : "#2f5fa3" }} />
+      </div>
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <p className="text-base font-medium leading-relaxed" style={{ color: "#18283a" }}>{task.text}</p>
+      </div>
+      {feedback ? (
+        <div className="rounded-2xl p-5" style={{ background: feedback.ok ? "#e3f4ef" : "#fce9e9" }}>
+          <p className="font-bold mb-2" style={{ color: feedback.ok ? "#2e7a55" : "#a93a3a" }}>{feedback.ok ? "✓ Správně" : "✗ Jinak"}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>{feedback.explanation}</p>
+          <button onClick={next} className="mt-3 w-full py-3 rounded-xl font-semibold text-sm text-white" style={{ background: t.btn }}>
+            {idx + 1 < tasks.length ? "Další →" : "Výsledky →"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => answer("deep")}
+            className="py-5 rounded-2xl font-bold text-base transition-all active:scale-[.97]"
+            style={{ background: "#eaf3fc", color: "#2f5fa3" }}>
+            🧠 Deep Work
+          </button>
+          <button onClick={() => answer("shallow")}
+            className="py-5 rounded-2xl font-bold text-base transition-all active:scale-[.97]"
+            style={{ background: "#f0ede8", color: "#5a6a74" }}>
+            💬 Shallow Work
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── IdealWeekBuilderGame ─────────────────────────────────────────────────── */
+function IdealWeekBuilderGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    instruction: string;
+    items: { text: string; correct: string; explanation: string }[];
+  };
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const t = TMAP[node.type];
+
+  const BUCKETS = [
+    { id: "protected", label: "Chráněný čas", icon: "🔒", color: "#2f5fa3", bg: "#eaf3fc" },
+    { id: "batch",     label: "Batched",       icon: "📦", color: "#b07a10", bg: "#fef4e0" },
+    { id: "eliminate", label: "Eliminovat",    icon: "🗑️", color: "#a93a3a", bg: "#fce9e9" },
+  ];
+
+  const allDone = data.items.every((_, i) => choices[i] !== undefined);
+
+  const submit = () => {
+    saveInsight(node.id, { choices }, "");
+    setSubmitted(true);
+  };
+
+  if (submitted) {
+    const correct = data.items.filter((item, i) => choices[i] === item.correct).length;
+    return (
+      <div className="space-y-4">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-5" style={{ background: t.bg }}>
+          <p className="font-bold text-lg mb-2" style={{ color: "#18283a" }}>{correct}/{data.items.length} správně</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>Takto Ferriss navrhuje ideální týden — záměrná architektura, ne reakce na to, co přijde.</p>
+        </div>
+        <div className="space-y-3">
+          {data.items.map((item, i) => {
+            const ok = choices[i] === item.correct;
+            const correctBucket = BUCKETS.find(b => b.id === item.correct);
+            return (
+              <div key={i} className="rounded-xl p-3 border" style={{ background: ok ? "#e3f4ef" : "#fce9e9", borderColor: ok ? "#9fd4c0" : "#f5cece" }}>
+                <p className="text-sm font-medium mb-1" style={{ color: "#18283a" }}>{item.text}</p>
+                {!ok && <p className="text-xs" style={{ color: "#5a6a74" }}>Správně: {correctBucket?.icon} {correctBucket?.label}</p>}
+                <p className="text-xs mt-1" style={{ color: "#5a6a74" }}>{item.explanation}</p>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={() => onDone({ correct, total: data.items.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <p className="text-sm px-1 leading-relaxed" style={{ color: "#5a6a74" }}>{data.instruction}</p>
+      <div className="flex gap-2 mb-2">
+        {BUCKETS.map(b => (
+          <div key={b.id} className="flex-1 text-center py-2 rounded-xl text-xs font-bold" style={{ background: b.bg, color: b.color }}>
+            {b.icon} {b.label}
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {data.items.map((item, i) => {
+          const chosen = choices[i];
+          return (
+            <div key={i} className="rounded-xl border p-3" style={{ background: "white", borderColor: chosen ? "#c8e8e1" : "#e8e3db" }}>
+              <p className="text-sm mb-2.5" style={{ color: "#18283a" }}>{item.text}</p>
+              <div className="flex gap-2">
+                {BUCKETS.map(b => (
+                  <button key={b.id} onClick={() => setChoices(p => ({ ...p, [i]: b.id }))}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[.97]"
+                    style={{ background: chosen === b.id ? b.color : b.bg, color: chosen === b.id ? "white" : b.color }}>
+                    {b.icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={submit} disabled={!allDone}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        Zobrazit výsledky →
+      </button>
+    </div>
+  );
+}
+
+/* ── EssentialismTriageGame ───────────────────────────────────────────────── */
+function EssentialismTriageGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    scenarios: {
+      scenario: string;
+      options: { label: string; outcome: string; type: string }[];
+    }[];
+  };
+  const [idx, setIdx] = useState(0);
+  const [chosen, setChosen] = useState<number | null>(null);
+  const [results, setResults] = useState<{ type: string }[]>([]);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const TYPE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+    correct: { bg: "#e3f4ef", color: "#2e7a55", label: "Nejlepší volba" },
+    partial: { bg: "#fef4e0", color: "#b07a10", label: "Částečně správně" },
+    wrong:   { bg: "#fce9e9", color: "#a93a3a", label: "Ne ideální" },
+  };
+
+  const next = () => {
+    if (chosen === null) return;
+    const type = data.scenarios[idx].options[chosen].type;
+    const newResults = [...results, { type }];
+    setResults(newResults);
+    setChosen(null);
+    if (idx + 1 >= data.scenarios.length) {
+      saveInsight(node.id, { results: newResults }, "");
+      setFinished(true);
+    } else {
+      setIdx(i => i + 1);
+    }
+  };
+
+  if (finished) {
+    const correct = results.filter(r => r.type === "correct").length;
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">⚖️</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{correct}/{data.scenarios.length} nejlepších voleb</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>Esencialismus není o odmítání — je o záměrných podmínkách.</p>
+        </div>
+        <button onClick={() => onDone({ correct, total: data.scenarios.length })} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const scenario = data.scenarios[idx];
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <div className="flex items-center gap-2 px-1 mb-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>Situace {idx + 1} / {data.scenarios.length}</span>
+      </div>
+      <div className="rounded-2xl p-5 border" style={{ background: "#fef9f4", borderColor: "#e8e3db" }}>
+        <p className="text-sm font-medium leading-relaxed" style={{ color: "#18283a" }}>{scenario.scenario}</p>
+      </div>
+      <div className="space-y-2">
+        {scenario.options.map((opt, i) => {
+          const isChosen = chosen === i;
+          const style = isChosen ? TYPE_STYLE[opt.type] : { bg: "white", color: "#18283a", label: "" };
+          return (
+            <div key={i}>
+              <button onClick={() => setChosen(i)}
+                className="w-full text-left p-4 rounded-xl border transition-all active:scale-[.99]"
+                style={{ background: style.bg, borderColor: isChosen ? (opt.type === "correct" ? "#9fd4c0" : opt.type === "partial" ? "#f5d78e" : "#f5cece") : "#e8e3db", color: style.color }}>
+                <p className="text-sm font-medium">{opt.label}</p>
+              </button>
+              {isChosen && (
+                <div className="rounded-b-xl px-4 pb-3 pt-2 -mt-2 border border-t-0" style={{ background: style.bg, borderColor: opt.type === "correct" ? "#9fd4c0" : opt.type === "partial" ? "#f5d78e" : "#f5cece" }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: TYPE_STYLE[opt.type].color }}>{TYPE_STYLE[opt.type].label}</p>
+                  <p className="text-xs" style={{ color: "#5a6a74" }}>{opt.outcome}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={next} disabled={chosen === null}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        {idx + 1 < data.scenarios.length ? "Další situace →" : "Výsledky →"}
+      </button>
+    </div>
+  );
+}
+
+/* ── ImpactEffortMatrixGame ───────────────────────────────────────────────── */
+function ImpactEffortMatrixGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    instruction: string;
+    axes: { x: { label: string; low: string; high: string }; y: { label: string; low: string; high: string } };
+    quadrants: Record<string, { label: string; description: string }>;
+    items: { text: string; suggestedQuadrant: string }[];
+  };
+
+  const [ratings, setRatings] = useState<Record<number, { impact: number; effort: number }>>({});
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const allDone = data.items.every((_, i) => ratings[i] !== undefined);
+
+  const getQuadrant = (impact: number, effort: number) => {
+    if (impact >= 3 && effort < 3)  return "highImpactLowEffort";
+    if (impact >= 3 && effort >= 3) return "highImpactHighEffort";
+    if (impact < 3  && effort < 3)  return "lowImpactLowEffort";
+    return "lowImpactHighEffort";
+  };
+
+  const QUADRANT_STYLE: Record<string, { color: string; bg: string }> = {
+    highImpactLowEffort:  { color: "#2e7a55", bg: "#e3f4ef" },
+    highImpactHighEffort: { color: "#2f5fa3", bg: "#eaf3fc" },
+    lowImpactLowEffort:   { color: "#b07a10", bg: "#fef4e0" },
+    lowImpactHighEffort:  { color: "#a93a3a", bg: "#fce9e9" },
+  };
+
+  const submit = () => {
+    saveInsight(node.id, { ratings }, "");
+    setFinished(true);
+  };
+
+  if (finished) {
+    const grouped: Record<string, string[]> = {};
+    data.items.forEach((item, i) => {
+      const r = ratings[i];
+      if (!r) return;
+      const q = getQuadrant(r.impact, r.effort);
+      if (!grouped[q]) grouped[q] = [];
+      grouped[q].push(item.text);
+    });
+    return (
+      <div className="space-y-4">
+        <NodeHeader node={node} />
+        {Object.entries(data.quadrants).map(([qKey, qVal]) => {
+          const items = grouped[qKey] || [];
+          const style = QUADRANT_STYLE[qKey];
+          return (
+            <div key={qKey} className="rounded-xl p-4" style={{ background: style.bg }}>
+              <p className="font-bold text-sm mb-1" style={{ color: style.color }}>{qVal.label}</p>
+              <p className="text-xs mb-2" style={{ color: "#5a6a74" }}>{qVal.description}</p>
+              {items.length > 0 ? items.map((it, i) => (
+                <p key={i} className="text-xs py-1 border-t" style={{ color: "#18283a", borderColor: "rgba(0,0,0,0.06)" }}>• {it}</p>
+              )) : <p className="text-xs" style={{ color: "#9e9288" }}>Žádné položky</p>}
+            </div>
+          );
+        })}
+        <button onClick={() => onDone({ ratings })} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <NodeHeader node={node} />
+      <p className="text-sm px-1 leading-relaxed" style={{ color: "#5a6a74" }}>{data.instruction}</p>
+      <div className="space-y-4">
+        {data.items.map((item, i) => {
+          const r = ratings[i];
+          const q = r ? getQuadrant(r.impact, r.effort) : null;
+          const style = q ? QUADRANT_STYLE[q] : null;
+          return (
+            <div key={i} className="rounded-xl border p-4" style={{ background: "white", borderColor: r ? "#c8e8e1" : "#e8e3db" }}>
+              <p className="text-sm font-medium mb-3" style={{ color: "#18283a" }}>{item.text}</p>
+              <div className="space-y-2">
+                <div>
+                  <div className="flex justify-between text-xs mb-1" style={{ color: "#9e9288" }}>
+                    <span>Dopad: {data.axes.y.low}</span>
+                    <span>{data.axes.y.high}</span>
+                  </div>
+                  <input type="range" min={1} max={5} step={1} value={r?.impact ?? 3}
+                    onChange={e => setRatings(p => ({ ...p, [i]: { impact: Number(e.target.value), effort: p[i]?.effort ?? 3 } }))}
+                    className="w-full" />
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs mb-1" style={{ color: "#9e9288" }}>
+                    <span>Úsilí: {data.axes.x.low}</span>
+                    <span>{data.axes.x.high}</span>
+                  </div>
+                  <input type="range" min={1} max={5} step={1} value={r?.effort ?? 3}
+                    onChange={e => setRatings(p => ({ ...p, [i]: { impact: p[i]?.impact ?? 3, effort: Number(e.target.value) } }))}
+                    className="w-full" />
+                </div>
+              </div>
+              {q && style && (
+                <div className="mt-2 px-3 py-1.5 rounded-lg text-xs font-bold inline-block" style={{ background: style.bg, color: style.color }}>
+                  → {data.quadrants[q].label}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={submit} disabled={!allDone}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        Zobrazit matici →
+      </button>
+    </div>
+  );
+}
+
 /* ── GameView router ──────────────────────────────────────────────────────── */
 function GameView({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   if (node.gameType === "the-gap")             return <TheGapGame            node={node} onDone={onDone} />;
@@ -2019,7 +2601,13 @@ function GameView({ node, onDone }: { node: PathNode; onDone: (content: Record<s
   if (node.gameType === "blame-flip")           return <BlameFlipGame          node={node} onDone={onDone} />;
   if (node.gameType === "oz-sequence")          return <OzSequenceGame         node={node} onDone={onDone} />;
   if (node.gameType === "locus-meter")          return <LocusMeterGame         node={node} onDone={onDone} />;
-  if (node.gameType === "boss-email-builder")   return <BossEmailBuilderGame   node={node} onDone={onDone} />;
+  if (node.gameType === "boss-email-builder")    return <BossEmailBuilderGame    node={node} onDone={onDone} />;
+  if (node.gameType === "quadrant-sort")         return <QuadrantSortGame        node={node} onDone={onDone} />;
+  if (node.gameType === "pareto-audit")          return <ParetoAuditGame         node={node} onDone={onDone} />;
+  if (node.gameType === "deep-shallow-sort")     return <DeepShallowSortGame     node={node} onDone={onDone} />;
+  if (node.gameType === "ideal-week-builder")    return <IdealWeekBuilderGame    node={node} onDone={onDone} />;
+  if (node.gameType === "essentialism-triage")   return <EssentialismTriageGame  node={node} onDone={onDone} />;
+  if (node.gameType === "impact-effort-matrix")  return <ImpactEffortMatrixGame  node={node} onDone={onDone} />;
   const t = TMAP[node.type];
   return (
     <div className="space-y-5">
