@@ -5,6 +5,7 @@ import { chapter1, type PathNode, type NodeType, type Chapter } from "@/data/cha
 import { chapter2 } from "@/data/chapter2";
 import { chapter3 } from "@/data/chapter3";
 import { chapter4 } from "@/data/chapter4";
+import { chapter5 } from "@/data/chapter5";
 import { supabase } from "@/lib/supabase";
 
 const ALL_CHAPTERS: { id: string; number: number; title: string; chapter: Chapter | null }[] = [
@@ -12,7 +13,7 @@ const ALL_CHAPTERS: { id: string; number: number; title: string; chapter: Chapte
   { id: "ch2",  number: 2,  title: "Vzorce",       chapter: chapter2 },
   { id: "ch3",  number: 3,  title: "Ownership",    chapter: chapter3 },
   { id: "ch4",  number: 4,  title: "Priority",     chapter: chapter4 },
-  { id: "ch5",  number: 5,  title: "Komunikace",   chapter: null },
+  { id: "ch5",  number: 5,  title: "Komunikace",   chapter: chapter5 },
   { id: "ch6",  number: 6,  title: "Energie",      chapter: null },
   { id: "ch7",  number: 7,  title: "Můj hlas",     chapter: null },
   { id: "ch8",  number: 8,  title: "Strategie",    chapter: null },
@@ -2583,6 +2584,551 @@ function ImpactEffortMatrixGame({ node, onDone }: { node: PathNode; onDone: (con
   );
 }
 
+/* ── SBI Builder ──────────────────────────────────────────────────────────── */
+function SbiBuilderGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    instruction: string;
+    rounds: { context: string; fragments: { text: string; correct: string; explanation: string }[] }[];
+  };
+  const [roundIdx, setRoundIdx] = useState(0);
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [totalScore, setTotalScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const BUCKETS = [
+    { id: "S",     label: "Situace",  icon: "📍", color: "#2f5fa3", bg: "#eaf3fc" },
+    { id: "C",     label: "Chování", icon: "👁️",  color: "#1D6B42", bg: "#e3f4ef" },
+    { id: "I",     label: "Dopad",   icon: "💥",  color: "#b07a10", bg: "#fef4e0" },
+    { id: "wrong", label: "Špatně",  icon: "✗",   color: "#a93a3a", bg: "#fce9e9" },
+  ];
+
+  const round = data.rounds[roundIdx];
+  const allDone = round.fragments.every((_, i) => choices[i] !== undefined);
+
+  const submit = () => {
+    const correct = round.fragments.filter((f, i) => choices[i] === f.correct).length;
+    setTotalScore(s => s + correct);
+    setSubmitted(true);
+  };
+
+  const next = () => {
+    if (roundIdx + 1 >= data.rounds.length) {
+      saveInsight(node.id, { totalScore }, "");
+      setFinished(true);
+    } else {
+      setRoundIdx(r => r + 1);
+      setChoices({});
+      setSubmitted(false);
+    }
+  };
+
+  if (finished) {
+    const max = data.rounds.reduce((s, r) => s + r.fragments.length, 0);
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">⚗️</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{totalScore}/{max} správně</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>
+            {totalScore >= max * 0.8 ? "SBI máš. Nejtěžší je teď ho použít živě." : "Záludné jsou hlavně 'špatné' fragmenty — vypadají jako dopad, ale jsou to soudy."}
+          </p>
+        </div>
+        <button onClick={() => onDone({})} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <NodeHeader node={node} />
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>Kolo {roundIdx + 1} / {data.rounds.length}</span>
+      </div>
+      <div className="rounded-xl p-4 border" style={{ background: "#fef9f4", borderColor: "#e8e3db" }}>
+        <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: "#9e9288" }}>Kontext</p>
+        <p className="text-sm font-medium" style={{ color: "#18283a" }}>{round.context}</p>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        {BUCKETS.map(b => (
+          <div key={b.id} className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold" style={{ background: b.bg, color: b.color }}>
+            <span>{b.icon}</span><span>{b.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {round.fragments.map((f, i) => {
+          const chosen = choices[i];
+          const bucket = chosen ? BUCKETS.find(b => b.id === chosen) : null;
+          const isCorrect = submitted ? chosen === f.correct : null;
+          return (
+            <div key={i} className="rounded-xl border p-3" style={{ background: "white", borderColor: submitted ? (isCorrect ? "#9fd4c0" : "#f5cece") : chosen ? "#c8e8e1" : "#e8e3db" }}>
+              <p className="text-sm mb-2" style={{ color: "#18283a" }}>{f.text}</p>
+              {!submitted ? (
+                <div className="flex gap-1.5 flex-wrap">
+                  {BUCKETS.map(b => (
+                    <button key={b.id} onClick={() => setChoices(p => ({ ...p, [i]: b.id }))}
+                      className="px-3 py-1 rounded-lg text-xs font-bold transition-all active:scale-[.97]"
+                      style={{ background: chosen === b.id ? b.color : b.bg, color: chosen === b.id ? "white" : b.color }}>
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs mt-1 space-y-0.5">
+                  <p style={{ color: isCorrect ? "#2e7a55" : "#a93a3a" }}>
+                    {isCorrect ? "✓" : "✗"} Správně: {BUCKETS.find(b => b.id === f.correct)?.label}
+                  </p>
+                  <p style={{ color: "#5a6a74" }}>{f.explanation}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {!submitted ? (
+        <button onClick={submit} disabled={!allDone}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: t.btn }}>
+          Zkontrolovat →
+        </button>
+      ) : (
+        <button onClick={next} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>
+          {roundIdx + 1 < data.rounds.length ? "Další kolo →" : "Výsledky →"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Candor Quadrant ──────────────────────────────────────────────────────── */
+function CandorQuadrantGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    timePerItem: number;
+    quadrants: { id: string; label: string; desc: string; color: string; bg: string }[];
+    items: { text: string; correct: string; explanation: string }[];
+  };
+  const { timePerItem, quadrants, items } = data;
+  const [idx, setIdx] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(timePerItem);
+  const [feedback, setFeedback] = useState<{ ok: boolean; explanation: string; correct: string } | null>(null);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const stateRef = useRef({ idx, score });
+  stateRef.current = { idx, score };
+
+  const answer = useCallback((choice: string | "timeout") => {
+    const { idx, score } = stateRef.current;
+    const item = items[idx];
+    const ok = choice !== "timeout" && choice === item.correct;
+    setScore(ok ? score + 1 : score);
+    setFeedback({ ok, explanation: item.explanation, correct: item.correct });
+  }, [items]);
+
+  useEffect(() => {
+    if (feedback || finished) return;
+    if (timeLeft <= 0) { answer("timeout"); return; }
+    const timer = setTimeout(() => setTimeLeft(s => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, feedback, finished, answer]);
+
+  const next = () => {
+    setFeedback(null);
+    if (idx + 1 >= items.length) { saveInsight(node.id, { score }, ""); setFinished(true); }
+    else { setIdx(i => i + 1); setTimeLeft(timePerItem); }
+  };
+
+  if (finished) {
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">🗺️</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{score}/{items.length} správně</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>
+            {score >= items.length * 0.75 ? "Výborně — matici Radical Candor máš." : "Nejčastější záměna: Ruinous Empathy vs. Radical Candor. Obě pečují — ale jen jedna říká pravdu."}
+          </p>
+        </div>
+        <button onClick={() => onDone({})} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const item = items[idx];
+  return (
+    <div className="space-y-4">
+      <NodeHeader node={node} />
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>{idx + 1} / {items.length}</span>
+        <span className="text-sm font-bold tabular-nums" style={{ color: timeLeft <= 3 ? "#a93a3a" : "#5a6a74" }}>{timeLeft}s</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#e8e3db" }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${(timeLeft / timePerItem) * 100}%`, background: timeLeft <= 3 ? "#a93a3a" : "#2f5fa3" }} />
+      </div>
+      <div className="rounded-2xl p-5 border" style={{ background: "white", borderColor: "#e8e3db" }}>
+        <p className="text-sm leading-relaxed" style={{ color: "#18283a" }}>{item.text}</p>
+      </div>
+      {feedback ? (
+        <div className="rounded-2xl p-5" style={{ background: feedback.ok ? "#e3f4ef" : "#fce9e9" }}>
+          <p className="font-bold mb-1" style={{ color: feedback.ok ? "#2e7a55" : "#a93a3a" }}>{feedback.ok ? "✓ Správně" : "✗ Jinak"}</p>
+          <p className="text-xs mb-1" style={{ color: "#5a6a74" }}>Správně: {quadrants.find(q => q.id === feedback.correct)?.label}</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>{feedback.explanation}</p>
+          <button onClick={next} className="mt-3 w-full py-3 rounded-xl font-semibold text-sm text-white" style={{ background: t.btn }}>
+            {idx + 1 < items.length ? "Další →" : "Výsledky →"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {quadrants.map(q => (
+            <button key={q.id} onClick={() => answer(q.id)}
+              className="py-3 px-3 rounded-xl text-left transition-all active:scale-[.97]"
+              style={{ background: q.bg, color: q.color }}>
+              <span className="block text-xs font-bold">{q.label}</span>
+              <span className="block text-xs mt-0.5 opacity-75">{q.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Listening Mode ───────────────────────────────────────────────────────── */
+function ListeningModeGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    instruction: string;
+    scenarios: {
+      speaker: string;
+      statement: string;
+      options: { type: string; text: string; quality: string; explanation: string }[];
+    }[];
+  };
+  const [idx, setIdx] = useState(0);
+  const [chosen, setChosen] = useState<number | null>(null);
+  const [finished, setFinished] = useState(false);
+  const [scores, setScores] = useState<string[]>([]);
+  const t = TMAP[node.type];
+
+  const QUALITY: Record<string, { color: string; bg: string; label: string }> = {
+    best:  { color: "#2e7a55", bg: "#e3f4ef", label: "Nejlepší volba" },
+    ok:    { color: "#b07a10", bg: "#fef4e0", label: "Funguje, ale..." },
+    weak:  { color: "#a93a3a", bg: "#fce9e9", label: "Slabá volba" },
+  };
+
+  const next = () => {
+    if (chosen === null) return;
+    const q = data.scenarios[idx].options[chosen].quality;
+    const newScores = [...scores, q];
+    setScores(newScores);
+    setChosen(null);
+    if (idx + 1 >= data.scenarios.length) {
+      saveInsight(node.id, { scores: newScores }, "");
+      setFinished(true);
+    } else {
+      setIdx(i => i + 1);
+    }
+  };
+
+  if (finished) {
+    const best = scores.filter(s => s === "best").length;
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">👂</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{best}/{data.scenarios.length} nejlepších voleb</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>Aktivní naslouchání se nedá předstírat. Ale dá se trénovat.</p>
+        </div>
+        <button onClick={() => onDone({})} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  const scenario = data.scenarios[idx];
+  return (
+    <div className="space-y-4">
+      <NodeHeader node={node} />
+      <div className="flex items-center gap-2 px-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>Situace {idx + 1} / {data.scenarios.length}</span>
+      </div>
+      <div className="rounded-xl p-4 border" style={{ background: "#fef9f4", borderColor: "#e8e3db" }}>
+        <p className="text-xs font-medium uppercase tracking-wide mb-2" style={{ color: "#9e9288" }}>{scenario.speaker}</p>
+        <p className="text-sm italic leading-relaxed" style={{ color: "#18283a" }}>"{scenario.statement}"</p>
+      </div>
+      <p className="text-xs px-1" style={{ color: "#9e9288" }}>Jak reaguješ?</p>
+      <div className="space-y-2">
+        {scenario.options.map((opt, i) => {
+          const isChosen = chosen === i;
+          const style = isChosen ? QUALITY[opt.quality] : { bg: "white", color: "#18283a", label: "" };
+          return (
+            <div key={i}>
+              <button onClick={() => setChosen(i)}
+                className="w-full text-left p-4 rounded-xl border transition-all active:scale-[.99]"
+                style={{ background: style.bg, borderColor: isChosen ? (opt.quality === "best" ? "#9fd4c0" : opt.quality === "ok" ? "#f5d78e" : "#f5cece") : "#e8e3db", color: style.color }}>
+                <p className="text-xs font-bold mb-1 uppercase tracking-wide opacity-60">{opt.type}</p>
+                <p className="text-sm">{opt.text}</p>
+              </button>
+              {isChosen && (
+                <div className="rounded-b-xl px-4 pb-3 pt-2 -mt-2 border border-t-0"
+                  style={{ background: style.bg, borderColor: opt.quality === "best" ? "#9fd4c0" : opt.quality === "ok" ? "#f5d78e" : "#f5cece" }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: QUALITY[opt.quality].color }}>{QUALITY[opt.quality].label}</p>
+                  <p className="text-xs" style={{ color: "#5a6a74" }}>{opt.explanation}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={next} disabled={chosen === null}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        {idx + 1 < data.scenarios.length ? "Další situace →" : "Výsledky →"}
+      </button>
+    </div>
+  );
+}
+
+/* ── Crucial Convo Builder ────────────────────────────────────────────────── */
+function CrucialConvoBuilderGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    scenarios: {
+      title: string;
+      setup: string;
+      steps: {
+        prompt: string;
+        options: { text: string; quality: string; explanation: string }[];
+      }[];
+    }[];
+  };
+  const [scenarioIdx, setScenarioIdx] = useState(0);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [chosen, setChosen] = useState<number | null>(null);
+  const [stepResults, setStepResults] = useState<string[]>([]);
+  const [allResults, setAllResults] = useState<{ scenario: string; results: string[] }[]>([]);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const QUALITY: Record<string, { color: string; bg: string; label: string }> = {
+    best:  { color: "#2e7a55", bg: "#e3f4ef", label: "Výborná volba" },
+    ok:    { color: "#b07a10", bg: "#fef4e0", label: "Obstojné" },
+    weak:  { color: "#a93a3a", bg: "#fce9e9", label: "Slabá volba" },
+  };
+
+  const scenario = data.scenarios[scenarioIdx];
+  const step = scenario.steps[stepIdx];
+
+  const next = () => {
+    if (chosen === null) return;
+    const q = step.options[chosen].quality;
+    const newStepResults = [...stepResults, q];
+
+    if (stepIdx + 1 >= scenario.steps.length) {
+      const newAllResults = [...allResults, { scenario: scenario.title, results: newStepResults }];
+      setAllResults(newAllResults);
+      setStepResults([]);
+      setChosen(null);
+      if (scenarioIdx + 1 >= data.scenarios.length) {
+        saveInsight(node.id, { allResults: newAllResults }, "");
+        setFinished(true);
+      } else {
+        setScenarioIdx(s => s + 1);
+        setStepIdx(0);
+      }
+    } else {
+      setStepResults(newStepResults);
+      setStepIdx(s => s + 1);
+      setChosen(null);
+    }
+  };
+
+  if (finished) {
+    const totalBest = allResults.reduce((s, r) => s + r.results.filter(q => q === "best").length, 0);
+    const totalSteps = allResults.reduce((s, r) => s + r.results.length, 0);
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">🌋</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{totalBest}/{totalSteps} nejlepších kroků</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>Klíčové konverzace se nedají dokonale nacvičit. Ale dají se vést lépe než mlčení.</p>
+        </div>
+        <button onClick={() => onDone({})} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <NodeHeader node={node} />
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>Situace {scenarioIdx + 1}/{data.scenarios.length} · Krok {stepIdx + 1}/{scenario.steps.length}</span>
+      </div>
+      <div className="rounded-xl p-4 border" style={{ background: "#fef9f4", borderColor: "#e8e3db" }}>
+        <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "#9e9288" }}>{scenario.title}</p>
+        <p className="text-sm leading-relaxed" style={{ color: "#18283a" }}>{stepIdx === 0 ? scenario.setup : step.prompt}</p>
+      </div>
+      {stepIdx > 0 && (
+        <div className="rounded-xl p-3 border" style={{ background: "#f0ede8", borderColor: "#e8e3db" }}>
+          <p className="text-xs font-medium" style={{ color: "#5a6a74" }}>{step.prompt}</p>
+        </div>
+      )}
+      {stepIdx === 0 && (
+        <p className="text-sm px-1 font-medium" style={{ color: "#18283a" }}>{step.prompt}</p>
+      )}
+      <div className="space-y-2">
+        {step.options.map((opt, i) => {
+          const isChosen = chosen === i;
+          const style = isChosen ? QUALITY[opt.quality] : { bg: "white", color: "#18283a", label: "" };
+          return (
+            <div key={i}>
+              <button onClick={() => setChosen(i)}
+                className="w-full text-left p-4 rounded-xl border transition-all active:scale-[.99]"
+                style={{ background: style.bg, borderColor: isChosen ? (opt.quality === "best" ? "#9fd4c0" : opt.quality === "ok" ? "#f5d78e" : "#f5cece") : "#e8e3db", color: style.color }}>
+                <p className="text-sm">{opt.text}</p>
+              </button>
+              {isChosen && (
+                <div className="rounded-b-xl px-4 pb-3 pt-2 -mt-2 border border-t-0"
+                  style={{ background: style.bg, borderColor: opt.quality === "best" ? "#9fd4c0" : opt.quality === "ok" ? "#f5d78e" : "#f5cece" }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: QUALITY[opt.quality].color }}>{QUALITY[opt.quality].label}</p>
+                  <p className="text-xs" style={{ color: "#5a6a74" }}>{opt.explanation}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={next} disabled={chosen === null}
+        className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: t.btn }}>
+        {stepIdx + 1 < scenario.steps.length ? "Další krok →" : scenarioIdx + 1 < data.scenarios.length ? "Další situace →" : "Výsledky →"}
+      </button>
+    </div>
+  );
+}
+
+/* ── NVC Rewriter ─────────────────────────────────────────────────────────── */
+function NvcRewriterGame({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
+  const data = node.gameData as {
+    instruction: string;
+    rounds: { original: string; fragments: { text: string; correct: string; explanation: string }[] }[];
+  };
+  const [roundIdx, setRoundIdx] = useState(0);
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [totalScore, setTotalScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const t = TMAP[node.type];
+
+  const BUCKETS = [
+    { id: "O",     label: "Pozorování", icon: "👁️",  color: "#2f5fa3", bg: "#eaf3fc" },
+    { id: "P",     label: "Pocit",      icon: "❤️",  color: "#993556", bg: "#FBEAF0" },
+    { id: "N",     label: "Potřeba",    icon: "🌱",  color: "#1D6B42", bg: "#e3f4ef" },
+    { id: "PR",    label: "Prosba",     icon: "🙏",  color: "#b07a10", bg: "#fef4e0" },
+    { id: "wrong", label: "Špatně",     icon: "✗",   color: "#a93a3a", bg: "#fce9e9" },
+  ];
+
+  const round = data.rounds[roundIdx];
+  const allDone = round.fragments.every((_, i) => choices[i] !== undefined);
+
+  const submit = () => {
+    const correct = round.fragments.filter((f, i) => choices[i] === f.correct).length;
+    setTotalScore(s => s + correct);
+    setSubmitted(true);
+  };
+
+  const next = () => {
+    if (roundIdx + 1 >= data.rounds.length) {
+      saveInsight(node.id, { totalScore }, "");
+      setFinished(true);
+    } else {
+      setRoundIdx(r => r + 1);
+      setChoices({});
+      setSubmitted(false);
+    }
+  };
+
+  if (finished) {
+    const max = data.rounds.reduce((s, r) => s + r.fragments.length, 0);
+    return (
+      <div className="space-y-5">
+        <NodeHeader node={node} />
+        <div className="rounded-2xl p-6 text-center" style={{ background: t.bg }}>
+          <div className="text-5xl mb-3">🕊️</div>
+          <p className="text-xl font-bold mb-1" style={{ color: "#18283a" }}>{totalScore}/{max} správně</p>
+          <p className="text-sm" style={{ color: "#5a6a74" }}>
+            {totalScore >= max * 0.8 ? "NVC máš. Nejtěžší je teď ho použít živě — zvlášť pocit vs. interpretaci." : "Nejčastější chyba: pocit jako 'cítím, že ty...' — to je interpretace, ne pocit."}
+          </p>
+        </div>
+        <button onClick={() => onDone({})} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>Pokračovat →</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <NodeHeader node={node} />
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium" style={{ color: "#9e9288" }}>Kolo {roundIdx + 1} / {data.rounds.length}</span>
+      </div>
+      <div className="rounded-xl p-4 border" style={{ background: "#fce9e9", borderColor: "#f5cece" }}>
+        <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: "#a93a3a" }}>Původní útok</p>
+        <p className="text-sm font-medium italic" style={{ color: "#18283a" }}>"{round.original}"</p>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {BUCKETS.map(b => (
+          <div key={b.id} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{ background: b.bg, color: b.color }}>
+            <span>{b.icon}</span><span>{b.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {round.fragments.map((f, i) => {
+          const chosen = choices[i];
+          const isCorrect = submitted ? chosen === f.correct : null;
+          return (
+            <div key={i} className="rounded-xl border p-3" style={{ background: "white", borderColor: submitted ? (isCorrect ? "#9fd4c0" : "#f5cece") : chosen ? "#c8e8e1" : "#e8e3db" }}>
+              <p className="text-sm mb-2" style={{ color: "#18283a" }}>{f.text}</p>
+              {!submitted ? (
+                <div className="flex gap-1.5 flex-wrap">
+                  {BUCKETS.map(b => (
+                    <button key={b.id} onClick={() => setChoices(p => ({ ...p, [i]: b.id }))}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-[.97]"
+                      style={{ background: chosen === b.id ? b.color : b.bg, color: chosen === b.id ? "white" : b.color }}>
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs mt-1 space-y-0.5">
+                  <p style={{ color: isCorrect ? "#2e7a55" : "#a93a3a" }}>
+                    {isCorrect ? "✓" : "✗"} Správně: {BUCKETS.find(b => b.id === f.correct)?.label}
+                  </p>
+                  <p style={{ color: "#5a6a74" }}>{f.explanation}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {!submitted ? (
+        <button onClick={submit} disabled={!allDone}
+          className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: t.btn }}>
+          Zkontrolovat →
+        </button>
+      ) : (
+        <button onClick={next} className="w-full py-4 rounded-2xl font-semibold text-base text-white" style={{ background: t.btn }}>
+          {roundIdx + 1 < data.rounds.length ? "Další kolo →" : "Výsledky →"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ── GameView router ──────────────────────────────────────────────────────── */
 function GameView({ node, onDone }: { node: PathNode; onDone: (content: Record<string, unknown>) => void }) {
   if (node.gameType === "the-gap")             return <TheGapGame            node={node} onDone={onDone} />;
@@ -2608,6 +3154,11 @@ function GameView({ node, onDone }: { node: PathNode; onDone: (content: Record<s
   if (node.gameType === "ideal-week-builder")    return <IdealWeekBuilderGame    node={node} onDone={onDone} />;
   if (node.gameType === "essentialism-triage")   return <EssentialismTriageGame  node={node} onDone={onDone} />;
   if (node.gameType === "impact-effort-matrix")  return <ImpactEffortMatrixGame  node={node} onDone={onDone} />;
+  if (node.gameType === "sbi-builder")           return <SbiBuilderGame          node={node} onDone={onDone} />;
+  if (node.gameType === "candor-quadrant")        return <CandorQuadrantGame      node={node} onDone={onDone} />;
+  if (node.gameType === "listening-mode")         return <ListeningModeGame       node={node} onDone={onDone} />;
+  if (node.gameType === "crucial-convo-builder")  return <CrucialConvoBuilderGame node={node} onDone={onDone} />;
+  if (node.gameType === "nvc-rewriter")           return <NvcRewriterGame         node={node} onDone={onDone} />;
   const t = TMAP[node.type];
   return (
     <div className="space-y-5">
